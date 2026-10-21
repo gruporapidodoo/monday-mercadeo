@@ -364,7 +364,9 @@ def rev_delete(fid):
         with db() as c: c.execute("delete from pieza_parte where fid=%s", (fid,)); c.execute("delete from pieza_archivo where id=%s", (fid,))
     with lock:
         rev_load()
-        for it in REV["data"].values(): it["archivos"] = [a for a in it["archivos"] if a["id"] != fid]
+        for k, it in REV["data"].items():
+            if k.startswith("_") or "archivos" not in it: continue
+            it["archivos"] = [a for a in it["archivos"] if a["id"] != fid]
     rev_save(); return jsonify(ok=True)
 
 
