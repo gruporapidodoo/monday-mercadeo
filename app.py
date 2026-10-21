@@ -190,6 +190,7 @@ def rev_load():
     with db() as c:
         c.execute("create table if not exists pieza_archivo (id serial primary key, pieza text, nombre text, tipo text, tam int, por text, datos bytea, subido timestamptz default now())")
         c.execute("create table if not exists pieza_original (id serial primary key, pieza text unique, nombre text, tipo text, tam int, datos bytea)")
+        c.execute("create table if not exists pieza_parte (fid int, n int, datos bytea, primary key (fid, n))")
         ORIG.clear(); ORIG.update({k: i for i, k in c.execute("select id, pieza from pieza_original").fetchall()})
         row = c.execute("select doc from tablero where id='revision'").fetchone()
     REV["data"] = row[0] if row else {}
@@ -288,18 +289,40 @@ def rev_upload():
     key = str(request.form.get("key", ""))[:400]; por = str(request.form.get("por", ""))[:20]
     f = request.files.get("file")
     if not key or not f: return jsonify(error="datos"), 400
-    data = f.read()
-    if len(data) > 100 * 1024 * 1024: return jsonify(error="grande"), 413
     tipo = f.mimetype or "application/octet-stream"
+    CH = 4 * 1024 * 1024
     if MEMORY:
-        fid = len(FILES) + 1; FILES[fid] = (f.filename, tipo, data)
+        data = f.read(); fid = len(FILES) + 1; FILES[fid] = (f.filename, tipo, data); tam = len(data)
     else:
-      with db() as c:
-        fid = c.execute("insert into pieza_archivo (pieza, nombre, tipo, tam, por, datos) values (%s,%s,%s,%s,%s,%s) returning id",
-                        (key, f.filename, tipo, len(data), por, data)).fetchone()[0]
+        # por partes de 4 MB: un solo insert grande corta la conexión de la base gratis
+        with db() as c:
+            fid = c.execute("insert into pieza_archivo (pieza, nombre, tipo, tam, por, datos) values (%s,%s,%s,0,%s,NULL) returning id",
+                            (key, f.filename, tipo, por)).fetchone()[0]
+        tam = 0; n = 0
+        try:
+            while True:
+                chunk = f.stream.read(CH)
+                if not chunk: break
+                tam += len(chunk)
+                if tam > 100 * 1024 * 1024: raise ValueError("grande")
+                for intento in range(3):
+                    try:
+                        with db() as c: c.execute("insert into pieza_parte (fid, n, datos) values (%s,%s,%s) on conflict do nothing", (fid, n, chunk))
+                        break
+                    except psycopg.OperationalError:
+                        if intento == 2: raise
+                        time.sleep(1.5)
+                n += 1
+        except Exception as e:
+            with db() as c:
+                c.execute("delete from pieza_parte where fid=%s", (fid,)); c.execute("delete from pieza_archivo where id=%s", (fid,))
+            if str(e) == "grande": return jsonify(error="grande"), 413
+            raise
+        with db() as c: c.execute("update pieza_archivo set tam=%s where id=%s", (tam, fid))
+    data = None
     with lock:
         rev_load(); it = rev_item(key)
-        it["archivos"].append({"id": fid, "nombre": f.filename, "tipo": tipo, "tam": len(data), "por": por, "at": int(time.time() * 1000)})
+        it["archivos"].append({"id": fid, "nombre": f.filename, "tipo": tipo, "tam": tam, "por": por, "at": int(time.time() * 1000)})
         it["estado"] = "rev"; it["listo"] = False; out = dict(it)
     rev_save(); sync_monday(key, "rev")
     return jsonify(item=out)
@@ -310,7 +333,7 @@ def rev_delete(fid):
     if not authed(): return jsonify(error="auth"), 401
     if MEMORY: FILES.pop(fid, None)
     else:
-        with db() as c: c.execute("delete from pieza_archivo where id=%s", (fid,))
+        with db() as c: c.execute("delete from pieza_parte where fid=%s", (fid,)); c.execute("delete from pieza_archivo where id=%s", (fid,))
     with lock:
         rev_load()
         for it in REV["data"].values(): it["archivos"] = [a for a in it["archivos"] if a["id"] != fid]
@@ -320,12 +343,7 @@ def rev_delete(fid):
 @app.get("/f/<int:fid>")
 def archivo(fid):
     if not authed(): return "no", 401
-    if MEMORY: row = FILES.get(fid)
-    else:
-        with db() as c:
-            row = c.execute("select nombre, tipo, datos from pieza_archivo where id=%s", (fid,)).fetchone()
-    if not row: return "no", 404
-    return stream(row)
+    return archivo_resp(fid)
 
 
 @app.post("/api/rev/original")
@@ -344,6 +362,45 @@ def rev_original():
                             (key, f.filename, tipo, len(data), data)).fetchone()[0]
     ORIG[key] = fid
     return jsonify(id=fid)
+
+
+def stream_partes(fid, nombre, tipo, tam):
+    CH = 4 * 1024 * 1024; rng = request.headers.get("Range", "")
+    a, z, code = 0, tam - 1, 200
+    if rng.startswith("bytes="):
+        x, _, y = rng[6:].partition("-"); a = int(x or 0); z = min(int(y) if y else tam - 1, tam - 1); code = 206
+        z = min(z, a + 8 * 1024 * 1024 - 1)       # máx. 8 MB por pedido
+    n0, n1 = a // CH, z // CH
+    with db() as c:
+        parts = c.execute("select n, datos from pieza_parte where fid=%s and n between %s and %s order by n", (fid, n0, n1)).fetchall()
+    buf = b"".join(bytes(p[1]) for p in parts); off = n0 * CH
+    body = buf[a - off: z - off + 1]
+    r = Response(body, code, mimetype=tipo)
+    if code == 206: r.headers["Content-Range"] = "bytes %d-%d/%d" % (a, a + len(body) - 1, tam)
+    r.headers["Accept-Ranges"] = "bytes"; r.headers["Cache-Control"] = "private, max-age=86400"; return r
+
+
+def archivo_resp(fid):
+    if MEMORY:
+        row = FILES.get(fid); return stream(row) if row else ("no", 404)
+    with db() as c:
+        row = c.execute("select nombre, tipo, tam, datos is not null from pieza_archivo where id=%s", (fid,)).fetchone()
+        if not row: return "no", 404
+        if row[3]:
+            full = c.execute("select nombre, tipo, datos from pieza_archivo where id=%s", (fid,)).fetchone(); return stream(full)
+    return stream_partes(fid, row[0], row[1], row[2])
+
+
+def archivo_resp_completo(fid):
+    """Para Drive: el archivo entero (el Apps Script no pide por rangos)."""
+    if MEMORY:
+        row = FILES.get(fid); return stream(row) if row else ("no", 404)
+    with db() as c:
+        row = c.execute("select nombre, tipo, tam, datos from pieza_archivo where id=%s", (fid,)).fetchone()
+        if not row: return "no", 404
+        if row[3] is not None: return Response(bytes(row[3]), mimetype=row[1])
+        parts = c.execute("select datos from pieza_parte where fid=%s order by n", (fid,)).fetchall()
+    return Response(b"".join(bytes(p[0]) for p in parts), mimetype=row[1])
 
 
 def stream(row):
@@ -474,11 +531,8 @@ def drive_config():
 @app.get("/api/drive/archivo/<int:fid>")
 def drive_archivo(fid):
     if not drive_ok(): return "no", 403
-    if MEMORY: row = FILES.get(fid)
-    else:
-        with db() as c: row = c.execute("select nombre, tipo, datos from pieza_archivo where id=%s", (fid,)).fetchone()
-    if not row: return "no", 404
-    return stream(row)
+    if request.args.get("todo"): request.environ.pop("HTTP_RANGE", None)
+    return archivo_resp_completo(fid)
 
 
 @app.get("/api/drive/pendientes")
