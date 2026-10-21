@@ -671,3 +671,19 @@ def listar_docs():
     with db() as c:
         rows = c.execute("select id, pieza, nombre, tipo, tam, subido from pieza_archivo where left(pieza, 5) = '_doc|' order by pieza, nombre").fetchall()
     return jsonify(docs=[{"id": r[0], "carpeta": r[1][5:], "nombre": r[2], "tipo": r[3], "tam": r[4], "at": int(r[5].timestamp() * 1000) if r[5] else 0} for r in rows])
+
+
+# ================= Google Drive (MARKETING · Grupo Rapid): enlaces a sus carpetas =================
+@app.get("/api/gdrive")
+def gdrive_get():
+    if not authed(): return jsonify(error="auth"), 401
+    with lock: rev_load(); return jsonify(REV["data"].get("_gdrive", {}))
+
+
+@app.post("/api/gdrive")
+def gdrive_set():
+    if not authed(): return jsonify(error="auth"), 401
+    b = request.get_json(silent=True) or {}
+    if not isinstance(b.get("carpetas"), list): return jsonify(error="datos"), 400
+    with lock: rev_load(); REV["data"]["_gdrive"] = {"raiz": str(b.get("raiz", "")), "carpetas": b["carpetas"][:60]}
+    rev_save(); return jsonify(ok=True)
