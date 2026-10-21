@@ -179,6 +179,8 @@ def cal(pid):
 # (file://), así que estas rutas aceptan CORS y un token en la cabecera o en ?t=.
 REV = {"data": None}
 FILES = {}
+ORIG = {}          # pieza -> id del archivo original (la versión vieja)
+ORIG_FILES = {}    # solo en modo memoria
 ESTADO_MONDAY = {"pend": "pend", "rev": "rev", "cambios": "edit", "ok": "ready"}
 
 
@@ -187,6 +189,8 @@ def rev_load():
     if MEMORY: REV["data"] = {}; return
     with db() as c:
         c.execute("create table if not exists pieza_archivo (id serial primary key, pieza text, nombre text, tipo text, tam int, por text, datos bytea, subido timestamptz default now())")
+        c.execute("create table if not exists pieza_original (id serial primary key, pieza text unique, nombre text, tipo text, tam int, datos bytea)")
+        ORIG.clear(); ORIG.update({k: i for i, k in c.execute("select id, pieza from pieza_original").fetchall()})
         row = c.execute("select doc from tablero where id='revision'").fetchone()
     REV["data"] = row[0] if row else {}
 
@@ -253,7 +257,7 @@ def api_token():
 @app.get("/api/rev")
 def rev_get():
     if not authed(): return jsonify(error="auth"), 401
-    with lock: rev_load(); return jsonify(items=REV["data"])
+    with lock: rev_load(); return jsonify(items={k: v for k, v in REV["data"].items() if not k.startswith("_")}, originales=ORIG)
 
 
 @app.post("/api/rev")
@@ -274,6 +278,7 @@ def rev_post():
             if b.get("cambios"): it["estado"] = "cambios"; it["listo"] = False
         estado = it["estado"]; out = dict(it)
     rev_save(); sync_monday(key, estado)
+    if estado == "ok": drive_notify(key, request.url_root)
     return jsonify(item=out)
 
 
@@ -320,13 +325,182 @@ def archivo(fid):
         with db() as c:
             row = c.execute("select nombre, tipo, datos from pieza_archivo where id=%s", (fid,)).fetchone()
     if not row: return "no", 404
-    data = bytes(row[2]); n = len(data)
-    rng = request.headers.get("Range", "")
+    return stream(row)
+
+
+@app.post("/api/rev/original")
+def rev_original():
+    """Carga (o reemplaza) el archivo original de una pieza: la versión vieja que hay que actualizar."""
+    if not authed(): return jsonify(error="auth"), 401
+    key = str(request.form.get("key", ""))[:400]; f = request.files.get("file")
+    if not key or not f: return jsonify(error="datos"), 400
+    data = f.read(); tipo = f.mimetype or "application/octet-stream"
+    with lock: rev_load()
+    if MEMORY:
+        fid = ORIG.get(key) or len(ORIG_FILES) + 1; ORIG_FILES[fid] = (f.filename, tipo, data)
+    else:
+        with db() as c:
+            fid = c.execute("insert into pieza_original (pieza, nombre, tipo, tam, datos) values (%s,%s,%s,%s,%s) on conflict (pieza) do update set nombre=excluded.nombre, tipo=excluded.tipo, tam=excluded.tam, datos=excluded.datos returning id",
+                            (key, f.filename, tipo, len(data), data)).fetchone()[0]
+    ORIG[key] = fid
+    return jsonify(id=fid)
+
+
+def stream(row):
+    data = bytes(row[2]); n = len(data); rng = request.headers.get("Range", "")
     if rng.startswith("bytes="):
         a, _, z = rng[6:].partition("-"); a = int(a or 0); z = int(z) if z else n - 1; z = min(z, n - 1)
         r = Response(data[a:z + 1], 206, mimetype=row[1]); r.headers["Content-Range"] = "bytes %d-%d/%d" % (a, z, n)
     else:
         r = Response(data, mimetype=row[1])
     r.headers["Accept-Ranges"] = "bytes"; r.headers["Cache-Control"] = "private, max-age=86400"
-    r.headers["Content-Disposition"] = "inline; filename*=UTF-8''" + __import__("urllib.parse").parse.quote(row[0] or "archivo")
     return r
+
+
+@app.get("/f/o/<int:fid>")
+def original(fid):
+    if not authed(): return "no", 401
+    if MEMORY: row = ORIG_FILES.get(fid)
+    else:
+        with db() as c: row = c.execute("select nombre, tipo, datos from pieza_original where id=%s", (fid,)).fetchone()
+    if not row: return "no", 404
+    return stream(row)
+
+
+LOGIN_PAGE = """<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Anuncios a actualizar</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f5f3;font:15px/1.5 "Segoe UI",system-ui,sans-serif;color:#1b1d22;padding:16px}
+form{background:#fff;border:1px solid #e2dfda;border-radius:14px;padding:28px;display:grid;gap:12px;width:min(360px,100%)}h1{margin:0;font-size:20px}p{margin:0;color:#646a75;font-size:13px}
+input{border:1px solid #e2dfda;border-radius:8px;padding:10px;font:inherit}button{background:#e01f26;color:#fff;border:0;border-radius:8px;padding:10px;font:inherit;font-weight:700;cursor:pointer}.e{color:#e01f26;font-size:13px;min-height:1em}</style></head>
+<body><form id="f"><h1>Anuncios a actualizar · Grupo Rapid</h1><p>Revisión de las piezas de pauta. Escriba la contraseña del equipo de Mercadeo.</p><input type="password" id="p" placeholder="Contraseña" autofocus><button>Entrar</button><div class="e" id="e"></div></form>
+<script>document.getElementById("f").onsubmit=function(ev){ev.preventDefault();fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pw:document.getElementById("p").value}),credentials:"same-origin"}).then(function(r){if(r.ok)location.reload();else document.getElementById("e").textContent="Contraseña incorrecta"})}</script></body></html>"""
+
+
+PAGINA = {"html": None}
+
+
+@app.post("/api/pagina")
+def subir_pagina():
+    """La página de revisión trae nombres de anuncios: no va en el repositorio público, se guarda en la base."""
+    if not authed(): return jsonify(error="auth"), 401
+    html = request.get_data(as_text=True)
+    if "<html" not in html[:2000]: return jsonify(error="html"), 400
+    PAGINA["html"] = html
+    if not MEMORY:
+        with db() as c:
+            c.execute("insert into tablero (id, ver, doc) values ('pagina_anuncios', 1, %s::jsonb) on conflict (id) do update set doc=excluded.doc, actualizado=now()",
+                      (json.dumps({"html": html}),))
+    return jsonify(ok=True, kb=len(html) // 1024)
+
+
+@app.get("/anuncios")
+def anuncios():
+    if not authed(): return Response(LOGIN_PAGE, mimetype="text/html")
+    if PAGINA["html"] is None and not MEMORY:
+        with db() as c:
+            row = c.execute("select doc from tablero where id='pagina_anuncios'").fetchone()
+        PAGINA["html"] = row[0]["html"] if row else ""
+    r = Response(PAGINA["html"] or "<p>La página todavía no está cargada.</p>", mimetype="text/html"); r.headers["Cache-Control"] = "no-cache"; return r
+
+
+# ================= Drive: al aprobar una pieza, su versión nueva se guarda en Google Drive =================
+# Un Apps Script en la cuenta de Google de Mercadeo recibe el aviso (web app) y baja el archivo a
+# "Anuncios aprobados - Grupo Rapid / <día de entrega> / <anuncio>". El servidor no guarda credenciales de Google.
+import datetime as _dt
+DOWS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+
+
+def drive_key(): return hmac.new(SECRET, b"drive", hashlib.sha256).hexdigest()[:32]
+def drive_ok(): return hmac.compare_digest(request.args.get("k", ""), drive_key())
+
+
+def pieza_info(key):
+    sube, grupo, name = (key.split("|", 2) + ["", "", ""])[:3]
+    try:
+        d = _dt.date.fromisoformat(sube); e = d - _dt.timedelta(2)
+        dia = "%s · Entrega %s %d oct · sube %s %d oct" % (e.isoformat(), DOWS[e.weekday()], e.day, DOWS[d.weekday()], d.day)
+    except ValueError:
+        dia = sube or "Sin fecha"
+    return {"dia": dia, "anuncio": (name + " — " + grupo)[:180], "grupo": grupo, "nombre_pieza": name}
+
+
+def drive_payload(key, a, base):
+    if "localhost" not in base and "127.0.0.1" not in base: base = base.replace("http://", "https://")
+    info = pieza_info(key)
+    return {"k": drive_key(), "id": a["id"], "key": key, "nombre": a["nombre"], "tipo": a.get("tipo", ""),
+            "url": base.rstrip("/") + "/api/drive/archivo/%d?k=%s" % (a["id"], drive_key()), **info}
+
+
+def drive_notify(key, base):
+    """Se llama al aprobar: manda al Apps Script la última versión de la pieza si todavía no está en Drive."""
+    hook = (REV["data"] or {}).get("_drive", {}).get("hook")
+    it = (REV["data"] or {}).get(key)
+    if not hook or not it or not it.get("listo") or not it.get("archivos"): return
+    a = it["archivos"][-1]
+    if a.get("drive"): return
+    payload = drive_payload(key, a, base)
+    def run():
+        import urllib.request
+        try:
+            req = urllib.request.Request(hook, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+            res = json.loads(urllib.request.urlopen(req, timeout=300).read().decode() or "{}")
+            if res.get("url"):
+                with lock:
+                    for x in REV["data"].get(key, {}).get("archivos", []):
+                        if x["id"] == a["id"]: x["drive"] = res["url"]
+                rev_save()
+            else:
+                print("drive:", res, flush=True)
+        except Exception as e:
+            print("drive:", e, flush=True)
+    threading.Thread(target=run, daemon=True).start()
+
+
+@app.get("/api/drive/clave")
+def drive_clave():
+    if not authed(): return jsonify(error="auth"), 401
+    with lock: rev_load(); hook = REV["data"].get("_drive", {}).get("hook", "")
+    return jsonify(clave=drive_key(), servidor=request.url_root.rstrip("/"), hook=hook)
+
+
+@app.post("/api/drive/config")
+def drive_config():
+    if not authed(): return jsonify(error="auth"), 401
+    hook = str((request.get_json(silent=True) or {}).get("hook", "")).strip()
+    if hook and not hook.startswith("https://script.google.com/") and not os.environ.get("TEST_ALLOW_HOOK"): return jsonify(error="url"), 400
+    with lock: rev_load(); REV["data"]["_drive"] = {"hook": hook}
+    rev_save(); return jsonify(ok=True)
+
+
+@app.get("/api/drive/archivo/<int:fid>")
+def drive_archivo(fid):
+    if not drive_ok(): return "no", 403
+    if MEMORY: row = FILES.get(fid)
+    else:
+        with db() as c: row = c.execute("select nombre, tipo, datos from pieza_archivo where id=%s", (fid,)).fetchone()
+    if not row: return "no", 404
+    return stream(row)
+
+
+@app.get("/api/drive/pendientes")
+def drive_pendientes():
+    """Aprobadas cuya última versión todavía no está en Drive (el Apps Script las recoge si un aviso falló)."""
+    if not drive_ok(): return jsonify(error="no"), 403
+    base = request.url_root
+    with lock:
+        rev_load()
+        out = [drive_payload(k, it["archivos"][-1], base) for k, it in REV["data"].items()
+               if not k.startswith("_") and it.get("listo") and it.get("archivos") and not it["archivos"][-1].get("drive")]
+    return jsonify(pendientes=out)
+
+
+@app.post("/api/drive/listo")
+def drive_listo():
+    if not drive_ok(): return jsonify(error="no"), 403
+    b = request.get_json(silent=True) or {}
+    with lock:
+        rev_load()
+        for k, it in REV["data"].items():
+            if k.startswith("_"): continue
+            for a in it.get("archivos", []):
+                if a["id"] == b.get("id"): a["drive"] = str(b.get("url", ""))[:500]
+    rev_save(); return jsonify(ok=True)

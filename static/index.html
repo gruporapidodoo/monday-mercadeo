@@ -328,7 +328,7 @@ function match(it){if(UI.person!=="all"&&(UI.person==="none"?it.owner:it.owner!=
 function nav(){const n=$("#nav");n.innerHTML="";const mob=$("#mobNav");mob.innerHTML="";
   const add=(id,label,icon,ct)=>{n.append(h("button",{class:UI.view===id?"on":"",onclick:()=>go(id)},h("span",{text:icon}),h("span",{text:label}),ct!=null?h("span",{class:"ct",text:ct}):null));mob.append(h("option",{value:id,selected:UI.view===id,text:icon+" "+label}))};
   n.append(h("h6",{text:"Espacio de trabajo"}));
-  D.people.forEach(p=>add("me:"+p.id,"Espacio de "+p.name,"☑",pendingToday(p.id)));add("home","Todo lo pendiente","🏠");add("cals","Calendarios Hilda e Irian","📅");
+  D.people.forEach(p=>add("me:"+p.id,"Espacio de "+p.name,"☑",pendingToday(p.id)));add("home","Todo lo pendiente","🏠");add("cals","Calendarios Hilda e Irian","📅");n.append(h("a",{href:"/anuncios",target:"_blank",style:{display:"flex",gap:"8px",padding:"7px 10px",borderRadius:"6px",textDecoration:"none",color:"inherit"}},h("span",{text:"🎬"}),h("span",{text:"Revisión de anuncios (videos)"})));
   n.append(h("h6",{text:"Tableros"}));
   D.boards.forEach(b=>add(b.id,b.name,b.icon,b.items.filter(i=>!isDone(b,i)).length));
   mob.onchange=()=>go(mob.value)}
