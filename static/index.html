@@ -282,7 +282,7 @@ function merge(base,loc,rem){const o=structuredClone(rem),Bb=byId(base.boards),L
 async function api(method,body){const r=await fetch("/api/state"+(method==="GET"?"?v="+VER:""),{method,headers:body?{"Content-Type":"application/json"}:{},body:body?J(body):undefined,credentials:"same-origin"});
   if(r.status===401){showLogin();throw new Error("auth")}return r}
 async function push(){if(PUSHING||!DIRTY)return;PUSHING=true;
-  try{while(DIRTY){const snap=J(D);const r=await api("POST",{base:VER,data:JSON.parse(snap)});
+  try{while(DIRTY){const snap=J(D);if(snap===J(BASE)){DIRTY=false;syncLabel("Guardado ✓");break}const r=await api("POST",{base:VER,data:JSON.parse(snap)});
       if(r.status===409){const x=await r.json();await idle();D=merge(BASE,D,x.data);BASE=x.data;VER=x.ver;safeRender();continue}
       if(!r.ok)throw new Error("http "+r.status);
       const x=await r.json();VER=x.ver;BASE=JSON.parse(snap);if(J(D)===snap){DIRTY=false;syncLabel("Guardado ✓")}}}
