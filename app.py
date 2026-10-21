@@ -16,11 +16,16 @@ lock = threading.Lock()
 S = {"ver": 0, "data": None, "dirty": False}
 
 
+MEMORY = DATABASE_URL.startswith("memory:")     # solo para probar en local: memory:<archivo semilla>
+
+
 def db():
     return psycopg.connect(DATABASE_URL, autocommit=True)
 
 
 def load():
+    if MEMORY:
+        S.update(ver=1, data=json.load(open(DATABASE_URL[7:], encoding="utf-8"))); return
     with db() as c:
         c.execute("create table if not exists tablero (id text primary key, ver int not null, doc jsonb not null, actualizado timestamptz default now())")
         c.execute("create table if not exists tablero_historial (ver int, doc jsonb, guardado timestamptz default now())")
@@ -32,6 +37,7 @@ def save():
     with lock:
         if not S["dirty"]: return
         ver, doc = S["ver"], json.dumps(S["data"], ensure_ascii=False); S["dirty"] = False
+    if MEMORY: return
     try:
         with db() as c:
             c.execute("update tablero set ver=%s, doc=%s::jsonb, actualizado=now() where id='mercadeo'", (ver, doc))
@@ -53,6 +59,11 @@ def writer():
 load()
 threading.Thread(target=writer, daemon=True).start()
 atexit.register(save)
+
+
+if os.environ.get("TEST_DELAY"):
+    @app.before_request
+    def _demora(): time.sleep(float(os.environ["TEST_DELAY"]))
 
 
 def token(): return hmac.new(SECRET, b"mercadeo-ok", hashlib.sha256).hexdigest()

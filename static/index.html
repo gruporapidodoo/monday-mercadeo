@@ -283,15 +283,16 @@ async function api(method,body){const r=await fetch("/api/state"+(method==="GET"
   if(r.status===401){showLogin();throw new Error("auth")}return r}
 async function push(){if(PUSHING||!DIRTY)return;PUSHING=true;
   try{while(DIRTY){const snap=J(D);const r=await api("POST",{base:VER,data:JSON.parse(snap)});
-      if(r.status===409){const x=await r.json();D=merge(BASE,D,x.data);BASE=x.data;VER=x.ver;safeRender();continue}
+      if(r.status===409){const x=await r.json();await idle();D=merge(BASE,D,x.data);BASE=x.data;VER=x.ver;safeRender();continue}
       if(!r.ok)throw new Error("http "+r.status);
       const x=await r.json();VER=x.ver;BASE=JSON.parse(snap);if(J(D)===snap){DIRTY=false;syncLabel("Guardado ✓")}}}
   catch(e){if(e.message!=="auth"){syncLabel("Sin conexión: reintentando…",true);setTimeout(push,5000)}}
   finally{PUSHING=false}}
-async function poll(){if(PUSHING||!D)return;try{const r=await api("GET");if(r.status===204){if(!DIRTY)syncLabel("Guardado ✓");return}
-  const x=await r.json();D=DIRTY?merge(BASE,D,x.data):x.data;BASE=x.data;VER=x.ver;CALKEY=x.calKey||CALKEY;safeRender();if(DIRTY)push()}catch(e){if(e.message!=="auth")syncLabel("Sin conexión",true)}}
+function idle(){return new Promise(res=>{if(!editing())return res();const t=setInterval(()=>{if(!editing()){clearInterval(t);res()}},250)})}
+async function poll(){if(PUSHING||!D||editing())return;try{const r=await api("GET");if(r.status===204){if(!DIRTY)syncLabel("Guardado ✓");return}
+  const x=await r.json();if(editing()||PUSHING)return;D=DIRTY?merge(BASE,D,x.data):x.data;BASE=x.data;VER=x.ver;CALKEY=x.calKey||CALKEY;safeRender();if(DIRTY)push()}catch(e){if(e.message!=="auth")syncLabel("Sin conexión",true)}}
 function editing(){const a=document.activeElement;return a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.type!=="checkbox"&&a.closest(".main,#dr")}
-function safeRender(){if(editing()){LATER=true;return}LATER=false;const did=UI.drawer&&UI.drawer.it.id;render();
+function safeRender(){if(editing()){LATER=true;return}LATER=false;closePop();const did=UI.drawer&&UI.drawer.it.id;render();
   if(did){for(const b of D.boards){const it=b.items.find(i=>i.id===did);if(it){openDrawer(b,it);break}}}}
 document.addEventListener("focusout",()=>setTimeout(()=>{if(LATER&&!editing())safeRender()},50));
 function showLogin(){if(document.querySelector(".login"))return;const i=h("input",{type:"password",placeholder:"Contraseña",autocomplete:"current-password"});const e=h("div",{class:"e"});
