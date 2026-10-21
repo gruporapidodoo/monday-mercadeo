@@ -11,7 +11,7 @@ SECRET = os.environ["SECRET"].encode()
 CAL_KEY = os.environ["CAL_KEY"]
 
 app = Flask(__name__, static_folder="static")
-app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 160 * 1024 * 1024
 lock = threading.Lock()
 S = {"ver": 0, "data": None, "dirty": False, "saved": 0, "err": "", "beat": 0}
 
@@ -82,7 +82,11 @@ if os.environ.get("TEST_DELAY"):
 
 
 def token(): return hmac.new(SECRET, b"mercadeo-ok", hashlib.sha256).hexdigest()
-def authed(): return hmac.compare_digest(request.cookies.get("mk", ""), token())
+def authed():
+    t = request.cookies.get("mk", "") or request.args.get("t", "")
+    h = request.headers.get("Authorization", "")
+    if h.startswith("Bearer "): t = h[7:]
+    return hmac.compare_digest(t, token())
 
 
 @app.get("/")
@@ -134,6 +138,7 @@ def post_state():
     if not authed(): return jsonify(error="auth"), 401
     b = request.get_json(silent=True) or {}
     if not isinstance(b.get("data"), dict) or "boards" not in b["data"]: return jsonify(error="datos"), 400
+    if request.content_length and request.content_length > 8 * 1024 * 1024: return jsonify(error="grande"), 413
     with lock:
         if S["data"] is None: return jsonify(error="vacío"), 503
         if b.get("base") != S["ver"]: return jsonify(ver=S["ver"], data=S["data"]), 409
@@ -167,3 +172,161 @@ def cal(pid):
                     ev(s["id"], "☐ " + s["name"], s["due"], s["due"], it["name"] + " · " + b["name"])
     L.append("END:VCALENDAR")
     return Response("\r\n".join(L), mimetype="text/calendar; charset=utf-8")
+
+
+# ================= Revisión de anuncios (calendario de la carpeta de Irian) =================
+# Cada pieza: check de listo, estado, comentarios y versiones nuevas subidas. El calendario es un HTML local
+# (file://), así que estas rutas aceptan CORS y un token en la cabecera o en ?t=.
+REV = {"data": None}
+FILES = {}
+ESTADO_MONDAY = {"pend": "pend", "rev": "rev", "cambios": "edit", "ok": "ready"}
+
+
+def rev_load():
+    if REV["data"] is not None: return
+    if MEMORY: REV["data"] = {}; return
+    with db() as c:
+        c.execute("create table if not exists pieza_archivo (id serial primary key, pieza text, nombre text, tipo text, tam int, por text, datos bytea, subido timestamptz default now())")
+        row = c.execute("select doc from tablero where id='revision'").fetchone()
+    REV["data"] = row[0] if row else {}
+
+
+def rev_save():
+    if MEMORY: return
+    with db() as c:
+        c.execute("insert into tablero (id, ver, doc) values ('revision', 1, %s::jsonb) on conflict (id) do update set doc=excluded.doc, actualizado=now()",
+                  (json.dumps(REV["data"], ensure_ascii=False),))
+
+
+def rev_item(key):
+    return REV["data"].setdefault(key, {"listo": False, "estado": "pend", "comentarios": [], "archivos": []})
+
+
+def sync_monday(key, estado):
+    """Pasa el estado de la pieza a su tarea en el tablero de anuncios del Monday."""
+    try:
+        sube, _, name = key.split("|", 2)
+    except ValueError:
+        return
+    with lock:
+        D = S["data"]
+        if not D: return
+        for b in D["boards"]:
+            if b["id"] != "anuncios": continue
+            for it in b["items"]:
+                if it.get("name") == name and (it.get("sube") or it.get("due")) == sube:
+                    new = ESTADO_MONDAY.get(estado, it["status"])
+                    if it["status"] != new:
+                        it["status"] = new; it["updatedAt"] = int(time.time() * 1000)
+                        S["ver"] += 1; S["dirty"] = True
+                    return
+
+
+def cors(r):
+    r.headers["Access-Control-Allow-Origin"] = "*"
+    r.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+    r.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
+    return r
+
+
+@app.after_request
+def _cors(r):
+    if request.path.startswith(("/api/rev", "/api/token", "/f/")): cors(r)
+    return r
+
+
+@app.route("/api/rev", methods=["OPTIONS"])
+@app.route("/api/rev/archivo", methods=["OPTIONS"])
+@app.route("/api/rev/archivo/<int:fid>", methods=["OPTIONS"])
+@app.route("/api/token", methods=["OPTIONS"])
+def _pre(fid=None): return "", 204
+
+
+@app.post("/api/token")
+def api_token():
+    pw = (request.get_json(silent=True) or {}).get("pw", "")
+    if not hmac.compare_digest(pw.encode(), APP_PASSWORD.encode()):
+        time.sleep(1); return jsonify(error="no"), 401
+    return jsonify(token=token())
+
+
+@app.get("/api/rev")
+def rev_get():
+    if not authed(): return jsonify(error="auth"), 401
+    with lock: rev_load(); return jsonify(items=REV["data"])
+
+
+@app.post("/api/rev")
+def rev_post():
+    if not authed(): return jsonify(error="auth"), 401
+    b = request.get_json(silent=True) or {}
+    key = str(b.get("key", ""))[:400]
+    if not key: return jsonify(error="key"), 400
+    with lock:
+        rev_load(); it = rev_item(key)
+        if "listo" in b:
+            it["listo"] = bool(b["listo"])
+            it["estado"] = "ok" if it["listo"] else ("rev" if it["archivos"] else "pend")
+        if b.get("estado") in ESTADO_MONDAY: it["estado"] = b["estado"]; it["listo"] = b["estado"] == "ok"
+        c = b.get("comentario")
+        if isinstance(c, dict) and str(c.get("text", "")).strip():
+            it["comentarios"].append({"id": os.urandom(4).hex(), "by": str(c.get("by", ""))[:20], "text": str(c["text"])[:3000], "cambios": bool(b.get("cambios")), "at": int(time.time() * 1000)})
+            if b.get("cambios"): it["estado"] = "cambios"; it["listo"] = False
+        estado = it["estado"]; out = dict(it)
+    rev_save(); sync_monday(key, estado)
+    return jsonify(item=out)
+
+
+@app.post("/api/rev/archivo")
+def rev_upload():
+    if not authed(): return jsonify(error="auth"), 401
+    key = str(request.form.get("key", ""))[:400]; por = str(request.form.get("por", ""))[:20]
+    f = request.files.get("file")
+    if not key or not f: return jsonify(error="datos"), 400
+    data = f.read()
+    if len(data) > 100 * 1024 * 1024: return jsonify(error="grande"), 413
+    tipo = f.mimetype or "application/octet-stream"
+    if MEMORY:
+        fid = len(FILES) + 1; FILES[fid] = (f.filename, tipo, data)
+    else:
+      with db() as c:
+        fid = c.execute("insert into pieza_archivo (pieza, nombre, tipo, tam, por, datos) values (%s,%s,%s,%s,%s,%s) returning id",
+                        (key, f.filename, tipo, len(data), por, data)).fetchone()[0]
+    with lock:
+        rev_load(); it = rev_item(key)
+        it["archivos"].append({"id": fid, "nombre": f.filename, "tipo": tipo, "tam": len(data), "por": por, "at": int(time.time() * 1000)})
+        it["estado"] = "rev"; it["listo"] = False; out = dict(it)
+    rev_save(); sync_monday(key, "rev")
+    return jsonify(item=out)
+
+
+@app.delete("/api/rev/archivo/<int:fid>")
+def rev_delete(fid):
+    if not authed(): return jsonify(error="auth"), 401
+    if MEMORY: FILES.pop(fid, None)
+    else:
+        with db() as c: c.execute("delete from pieza_archivo where id=%s", (fid,))
+    with lock:
+        rev_load()
+        for it in REV["data"].values(): it["archivos"] = [a for a in it["archivos"] if a["id"] != fid]
+    rev_save(); return jsonify(ok=True)
+
+
+@app.get("/f/<int:fid>")
+def archivo(fid):
+    if not authed(): return "no", 401
+    if MEMORY: row = FILES.get(fid)
+    else:
+        with db() as c:
+            row = c.execute("select nombre, tipo, datos from pieza_archivo where id=%s", (fid,)).fetchone()
+    if not row: return "no", 404
+    data = bytes(row[2]); n = len(data)
+    rng = request.headers.get("Range", "")
+    if rng.startswith("bytes="):
+        a, _, z = rng[6:].partition("-"); a = int(a or 0); z = int(z) if z else n - 1; z = min(z, n - 1)
+        r = Response(data[a:z + 1], 206, mimetype=row[1]); r.headers["Content-Range"] = "bytes %d-%d/%d" % (a, z, n)
+    else:
+        r = Response(data, mimetype=row[1])
+    r.headers["Accept-Ranges"] = "bytes"; r.headers["Cache-Control"] = "private, max-age=86400"
+    r.headers["Content-Disposition"] = "inline; filename*=UTF-8''" + __import__("urllib.parse").parse.quote(row[0] or "archivo")
+    return r
