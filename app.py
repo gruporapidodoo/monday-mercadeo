@@ -405,7 +405,9 @@ def stream_partes(fid, nombre, tipo, tam):
     body = buf[a - off: z - off + 1]
     r = Response(body, code, mimetype=tipo)
     if code == 206: r.headers["Content-Range"] = "bytes %d-%d/%d" % (a, a + len(body) - 1, tam)
-    r.headers["Accept-Ranges"] = "bytes"; r.headers["Cache-Control"] = "private, max-age=86400"; return r
+    r.headers["Accept-Ranges"] = "bytes"; r.headers["Cache-Control"] = "private, max-age=86400"
+    if request.args.get("dl"): r.headers["Content-Disposition"] = "attachment; filename*=UTF-8''" + __import__("urllib.parse").parse.quote(nombre or "archivo")
+    return r
 
 
 def archivo_resp(fid):
@@ -439,6 +441,7 @@ def stream(row):
     else:
         r = Response(data, mimetype=row[1])
     r.headers["Accept-Ranges"] = "bytes"; r.headers["Cache-Control"] = "private, max-age=86400"
+    if request.args.get("dl"): r.headers["Content-Disposition"] = "attachment; filename*=UTF-8''" + __import__("urllib.parse").parse.quote(row[0] or "archivo")
     return r
 
 
@@ -589,3 +592,82 @@ def drive_listo():
             for a in it.get("archivos", []):
                 if a["id"] == b.get("id"): a["drive"] = str(b.get("url", ""))[:500]
     rev_save(); return jsonify(ok=True)
+
+
+# ================= Drive interno: carpetas por día › anuncio › Vieja / Nueva =================
+@app.get("/drive")
+def drive_page():
+    if not authed(): return Response(LOGIN_PAGE.replace("Anuncios a actualizar · Grupo Rapid", "Drive de Mercadeo · Grupo Rapid"), mimetype="text/html")
+    r = send_from_directory("static", "drive.html"); r.headers["Cache-Control"] = "no-cache"; return r
+
+
+@app.get("/api/drive/arbol")
+def drive_arbol():
+    if not authed(): return jsonify(error="auth"), 401
+    with lock: rev_load()
+    if MEMORY:
+        orig = {k: {"id": i, "nombre": ORIG_FILES[i][0], "tipo": ORIG_FILES[i][1], "tam": len(ORIG_FILES[i][2])} for k, i in ORIG.items() if i in ORIG_FILES}
+    else:
+        with db() as c:
+            orig = {r[1]: {"id": r[0], "nombre": r[2], "tipo": r[3], "tam": r[4]} for r in c.execute("select id, pieza, nombre, tipo, tam from pieza_original").fetchall()}
+    with lock:
+        keys = set(orig) | {k for k in REV["data"] if not k.startswith("_")}
+        out = []
+        for k in sorted(keys):
+            it = REV["data"].get(k, {}); info = pieza_info(k)
+            out.append({"key": k, "dia": info["dia"], "grupo": info["grupo"], "nombre": info["nombre_pieza"], "estado": it.get("estado", "pend"),
+                        "vieja": orig.get(k), "nuevas": it.get("archivos", [])})
+    return jsonify(items=out)
+
+
+# ================= Documentos (planes, presentaciones) dentro del Drive interno =================
+def guardar_por_partes(pieza, nombre, tipo, por, stream_):
+    CH = 4 * 1024 * 1024
+    if MEMORY:
+        data = stream_.read(); fid = len(FILES) + 1; FILES[fid] = (nombre, tipo, data); return fid, len(data)
+    with db() as c:
+        fid = c.execute("insert into pieza_archivo (pieza, nombre, tipo, tam, por, datos) values (%s,%s,%s,0,%s,NULL) returning id", (pieza, nombre, tipo, por)).fetchone()[0]
+    tam = 0; n = 0
+    try:
+        while True:
+            chunk = stream_.read(CH)
+            if not chunk: break
+            tam += len(chunk)
+            for intento in range(3):
+                try:
+                    with db() as c: c.execute("insert into pieza_parte (fid, n, datos) values (%s,%s,%s) on conflict do nothing", (fid, n, chunk))
+                    break
+                except psycopg.OperationalError:
+                    if intento == 2: raise
+                    time.sleep(1.5)
+            n += 1
+    except Exception:
+        with db() as c:
+            c.execute("delete from pieza_parte where fid=%s", (fid,)); c.execute("delete from pieza_archivo where id=%s", (fid,))
+        raise
+    with db() as c: c.execute("update pieza_archivo set tam=%s where id=%s", (tam, fid))
+    return fid, tam
+
+
+@app.post("/api/doc")
+def subir_doc():
+    """Sube un documento a una carpeta del Drive interno; reemplaza el que tenga el mismo nombre en esa carpeta."""
+    if not authed(): return jsonify(error="auth"), 401
+    carpeta = str(request.form.get("carpeta", "Planes y documentos"))[:120]; f = request.files.get("file")
+    if not f: return jsonify(error="datos"), 400
+    pieza = "_doc|" + carpeta
+    if not MEMORY:
+        with db() as c:
+            for (old,) in c.execute("select id from pieza_archivo where pieza=%s and nombre=%s", (pieza, f.filename)).fetchall():
+                c.execute("delete from pieza_parte where fid=%s", (old,)); c.execute("delete from pieza_archivo where id=%s", (old,))
+    fid, tam = guardar_por_partes(pieza, f.filename, f.mimetype or "application/octet-stream", "mercadeo", f.stream)
+    return jsonify(id=fid, tam=tam)
+
+
+@app.get("/api/docs")
+def listar_docs():
+    if not authed(): return jsonify(error="auth"), 401
+    if MEMORY: return jsonify(docs=[])
+    with db() as c:
+        rows = c.execute("select id, pieza, nombre, tipo, tam, subido from pieza_archivo where left(pieza, 5) = '_doc|' order by pieza, nombre").fetchall()
+    return jsonify(docs=[{"id": r[0], "carpeta": r[1][5:], "nombre": r[2], "tipo": r[3], "tam": r[4], "at": int(r[5].timestamp() * 1000) if r[5] else 0} for r in rows])
