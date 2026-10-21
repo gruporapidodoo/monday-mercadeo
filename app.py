@@ -211,8 +211,32 @@ def rev_item(key):
     return REV["data"].setdefault(key, {"listo": False, "estado": "pend", "comentarios": [], "archivos": []})
 
 
+def sync_posts(key):
+    import re as _re
+    grupo = key.split("|")[1] if key.count("|") >= 2 else ""
+    m = _re.search(r"Post (\d+)", grupo)
+    if not m: return
+    n = int(m.group(1)); pref = key.split("|")[0] + "|" + grupo + "|"
+    with lock:
+        ests = [v["estado"] for k, v in (REV["data"] or {}).items() if k.startswith(pref)]
+        if not ests: return
+        new = "done" if all(e == "ok" for e in ests) else ("prog" if "cambios" in ests else ("rev" if any(e in ("rev", "ok") for e in ests) else "pend"))
+        D = S["data"]
+        if not D: return
+        for b in D["boards"]:
+            for it in b["items"]:
+                if it.get("name", "").startswith("Agregar el isotipo de cada empresa"):
+                    for su in it.get("subs") or []:
+                        if su.get("name", "").split(" ·")[0].strip() == "Post %d" % n and su.get("status") != new:
+                            su["status"] = new; S["ver"] += 1; S["dirty"] = True
+                    allsubs = [su.get("status") for su in it.get("subs") or []]
+                    if allsubs and all(x == "done" for x in allsubs) and it["status"] != "done":
+                        it["status"] = "done"; S["ver"] += 1; S["dirty"] = True
+
+
 def sync_monday(key, estado):
     """Pasa el estado de la pieza a su tarea en el tablero de anuncios del Monday."""
+    if "|Posts @gruporapid" in key: return sync_posts(key)
     try:
         sube, _, name = key.split("|", 2)
     except ValueError:
@@ -476,6 +500,9 @@ def drive_ok(): return hmac.compare_digest(request.args.get("k", ""), drive_key(
 
 def pieza_info(key):
     sube, grupo, name = (key.split("|", 2) + ["", "", ""])[:3]
+    if grupo.startswith("Posts @gruporapid"):
+        post = grupo.split(" · ", 1)[1] if " · " in grupo else grupo
+        return {"dia": "2026-10-21 · Posts @gruporapid con isotipo", "anuncio": post, "grupo": grupo, "nombre_pieza": name}
     try:
         d = _dt.date.fromisoformat(sube); e = d - _dt.timedelta(2)
         dia = "%s · Entrega %s %d oct · sube %s %d oct" % (e.isoformat(), DOWS[e.weekday()], e.day, DOWS[d.weekday()], d.day)
