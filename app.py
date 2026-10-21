@@ -13,7 +13,7 @@ CAL_KEY = os.environ["CAL_KEY"]
 app = Flask(__name__, static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
 lock = threading.Lock()
-S = {"ver": 0, "data": None, "dirty": False}
+S = {"ver": 0, "data": None, "dirty": False, "saved": 0, "err": "", "beat": 0}
 
 
 MEMORY = DATABASE_URL.startswith("memory:")     # solo para probar en local: memory:<archivo semilla>
@@ -40,7 +40,10 @@ def save():
     if MEMORY: return
     try:
         with db() as c:
-            c.execute("update tablero set ver=%s, doc=%s::jsonb, actualizado=now() where id='mercadeo'", (ver, doc))
+            n = c.execute("update tablero set ver=%s, doc=%s::jsonb, actualizado=now() where id='mercadeo'", (ver, doc)).rowcount
+            if n == 0:
+                c.execute("insert into tablero (id, ver, doc) values ('mercadeo', %s, %s::jsonb)", (ver, doc))
+            S["saved"] = ver
             if ver % 50 == 0:   # copia de respaldo cada 50 cambios, se guardan las últimas 60
                 c.execute("insert into tablero_historial (ver, doc) values (%s, %s::jsonb)", (ver, doc))
                 c.execute("delete from tablero_historial where ver not in (select ver from tablero_historial order by guardado desc limit 60)")
@@ -52,8 +55,9 @@ def save():
 def writer():
     while True:
         time.sleep(2)
-        try: save()
-        except Exception as e: print("guardar:", e, flush=True)
+        S["beat"] = int(time.time())
+        try: save(); S["err"] = ""
+        except Exception as e: S["err"] = repr(e)[:300]; print("guardar:", e, flush=True)
 
 
 load()
@@ -76,7 +80,9 @@ def index():
 
 
 @app.get("/healthz")
-def health(): return "ok"
+def health():
+    if not authed(): return "ok"
+    return jsonify(ver=S["ver"], saved=S["saved"], dirty=S["dirty"], err=S["err"], beat=int(time.time()) - S["beat"], pid=os.getpid())
 
 
 @app.post("/api/login")
