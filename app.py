@@ -29,6 +29,10 @@ def load():
     with db() as c:
         c.execute("create table if not exists tablero (id text primary key, ver int not null, doc jsonb not null, actualizado timestamptz default now())")
         c.execute("create table if not exists tablero_historial (ver int, doc jsonb, guardado timestamptz default now())")
+        c.execute("create table if not exists pieza_archivo (id serial primary key, pieza text, nombre text, tipo text, tam int, por text, datos bytea, subido timestamptz default now())")
+        c.execute("create table if not exists pieza_parte (fid int, n int, datos bytea, primary key (fid, n))")
+        # subidas que quedaron a medias
+        c.execute("delete from pieza_archivo a where a.datos is null and a.tam = 0 and not exists (select 1 from pieza_parte p where p.fid = a.id)")
         row = c.execute("select ver, doc from tablero where id='mercadeo'").fetchone()
     if row: S.update(ver=row[0], data=row[1])
 
