@@ -61,8 +61,19 @@ def writer():
 
 
 load()
-threading.Thread(target=writer, daemon=True).start()
-atexit.register(save)
+_W = {"pid": None}
+
+
+def ensure_writer():
+    """Gunicorn puede cargar la app antes de crear el proceso que atiende (--preload): el hilo se arranca en ese proceso."""
+    if _W["pid"] != os.getpid():
+        _W["pid"] = os.getpid()
+        threading.Thread(target=writer, daemon=True).start()
+        atexit.register(save)
+
+
+@app.before_request
+def _antes(): ensure_writer()
 
 
 if os.environ.get("TEST_DELAY"):
