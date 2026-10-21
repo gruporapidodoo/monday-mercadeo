@@ -65,12 +65,12 @@ function diaLabel(d){return d.replace(/^\d{4}-\d{2}-\d{2} · /,"")}
 function rootOf(it){return it.dia}
 function build(){var R={};ITEMS.forEach(function(it){var a=rootOf(it),g=it.grupo.indexOf("Posts @gruporapid")===0?"Posts @gruporapid con isotipo":it.grupo;
   ((R[a]=R[a]||{})[g]=R[a][g]||[]).push(it)});return R}
-function parse(){var h=decodeURIComponent(location.hash.slice(1));if(!h)return{};var p=h.split("|");
-  if(p[0]==="doc")return{doc:p[1]||""};
-  if(p[0]==="k"){var key=p.slice(1,p.length-1).join("|"),f=p[p.length-1];var it=ITEMS.find(function(x){return x.key===key});if(it)return{dia:rootOf(it),grupo:grupoOf(it),key:key,f:f};return{}}
-  return{dia:p[0]||null,grupo:p[1]||null,key:p[2]||null,f:p[3]||null}}
+function parse(){var raw=location.hash.slice(1);if(!raw)return{};var h=decodeURIComponent(raw);
+  if(h.indexOf("doc|")===0)return{doc:h.slice(4)};
+  if(h.indexOf("k|")===0){var p=h.split("|"),key=p.slice(1,p.length-1).join("|"),f=p[p.length-1];var it=ITEMS.find(function(x){return x.key===key});if(it)return{dia:rootOf(it),grupo:grupoOf(it),key:key,f:f};return{}}
+  var q=raw.split("/").map(function(x){return decodeURIComponent(x)});return{dia:q[0]||null,grupo:q[1]||null,key:q[2]||null,f:q[3]||null}}
 function grupoOf(it){return it.grupo.indexOf("Posts @gruporapid")===0?"Posts @gruporapid con isotipo":it.grupo}
-function go(d,g,k,f){var parts=[d,g,k,f].filter(function(x){return x!=null&&x!==""});location.hash=parts.length?encodeURIComponent(parts.join("|")):""}
+function go(d,g,k,f){var parts=[d,g,k,f].filter(function(x){return x!=null&&x!==""});location.hash=parts.map(function(x){return encodeURIComponent(x)}).join("/")}
 function piezaNombre(it){return it.grupo.indexOf("Posts @gruporapid")===0?it.grupo.split(" · ").slice(1).join(" · ")+" · "+it.nombre:it.nombre}
 function fileCard(f,url,tag,tagcls,sub){var b=el("button",{"class":"file",type:"button"});var th=el("div",{"class":"th"});
   if(isImg(f))th.append(el("img",{src:url,loading:"lazy",alt:""}));else{var v=el("video",{src:url+"#t=1",preload:"metadata",muted:""});v.muted=true;th.append(v)}
