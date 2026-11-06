@@ -109,9 +109,15 @@ def login():
     pw = (request.get_json(silent=True) or {}).get("pw", "")
     if not hmac.compare_digest(pw.encode(), APP_PASSWORD.encode()):
         time.sleep(1); return jsonify(error="no"), 401
-    r = jsonify(ok=True)
+    user = str((request.get_json(silent=True) or {}).get("user", ""))[:20]
+    r = jsonify(ok=True, user=user)
     r.set_cookie("mk", token(), max_age=60 * 60 * 24 * 180, httponly=True, secure=True, samesite="Lax")
     return r
+
+
+@app.post("/api/logout")
+def logout():
+    r = jsonify(ok=True); r.delete_cookie("mk"); return r
 
 
 @app.get("/api/state")
