@@ -373,6 +373,19 @@ tr:hover .ra{opacity:1}.ra:hover{background:var(--ln)}
 .cki .pass{gap:5px}
 .two>div{min-width:0;grid-template-columns:minmax(0,1fr)}.ck{min-width:0}.cki.tcard{min-width:0}
 @media (max-width:900px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{flex-direction:column;align-items:flex-start}}
+/* nombres completos, en varias líneas */
+textarea.wta{flex:1;min-width:0;width:100%;resize:none;overflow:hidden;border:1px solid transparent;background:none;padding:6px;border-radius:4px;font:inherit;font-size:14px;line-height:1.35;color:var(--ink);white-space:pre-wrap;word-break:break-word;display:block}
+textarea.wta:hover{border-color:var(--ln)}textarea.wta:focus{border-color:var(--acc);outline:0;background:var(--sf)}
+textarea.wta.tx{font-size:13px;padding:6px 8px}
+tr.done textarea.wta{text-decoration:line-through;color:var(--mu)}
+td{height:auto!important;vertical-align:middle}
+.nm{position:relative;height:auto;min-height:36px;padding:2px 8px}
+.nm .acts{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;gap:2px;align-items:center;background:var(--sf);border-radius:6px;box-shadow:-10px 0 10px var(--sf);padding:2px;opacity:0;pointer-events:none;transition:opacity .12s}
+tr:hover .nm .acts,.nm .acts:focus-within{opacity:1;pointer-events:auto}
+.nm .acts .op{opacity:1}
+.nm:has(.todo.on) .acts,.nm:has(.ra.inp) .acts{opacity:1;pointer-events:auto;position:static;transform:none;box-shadow:none;background:none}
+tbody tr:hover .nm .acts{background:#f5f6f8;box-shadow:-10px 0 10px #f5f6f8}
+.st{white-space:normal;line-height:1.2;padding:4px 6px}
 /* avisos */
 .alerts{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
 .al{display:flex;flex-direction:column;align-items:flex-start;gap:2px;border:0;border-radius:6px;padding:8px 14px;cursor:pointer;font:inherit;text-align:left;max-width:360px;color:#fff}
@@ -552,18 +565,18 @@ function cellFor(b,it,cl){const done=isDone(b,it);
     case "tag":{const v=(it.v||{})[cl.key]||"";const tc=(D.tagColors||{})[v]||"#7e8597";return h("td",{},h("div",{class:"cell"},v?h("span",{class:"tag",style:{"--tc":tc},text:v}):""))}
     case "files":return h("td",{},filesCell(b,it,cl));
     case "link":{const v=(it.v||{})[cl.key];return h("td",{},v?h("a",{class:"lnk",href:v,target:"_blank",rel:"noopener",text:cl.text||"Abrir"}):"")}
-    default:{const v=(it.v||{})[cl.key]||"";return h("td",{},h("input",{class:"tx",value:v,title:v,onchange:e=>{it.v=it.v||{};it.v[cl.key]=e.target.value;save()}}))}}}
+    default:{const v=(it.v||{})[cl.key]||"";return h("td",{},wrapTA(v,val=>{it.v=it.v||{};it.v[cl.key]=val;save()},"tx"))}}}
 function itemRow(b,it){const done=isDone(b,it),subs=it.subs||[],sd=subs.filter(s=>(D.doneStatus.general||[]).includes(s.status)).length;
   const tr=h("tr",{class:done?"done":""});
   tr.append(h("td",{class:"name"},h("div",{class:"nm"},
     h("button",{class:"sub",title:"Subelementos",onclick:()=>{UI.open.has(it.id)?UI.open.delete(it.id):UI.open.add(it.id);render()},text:(UI.open.has(it.id)?"▾ ":"▸ ")+(subs.length?sd+"/"+subs.length:"+")}),
-    h("input",{value:it.name,title:it.name,onchange:e=>{it.name=e.target.value;save()}}),
+    wrapTA(it.name,v=>{it.name=v;save()}),
     (it.updates||[]).length?h("span",{class:"upd",title:"Actualizaciones",text:"💬"+it.updates.length}):null,
-    todoBtn(b,it,null),h("button",{class:"op",title:"Abrir",text:"⤢ Abrir",onclick:()=>openDrawer(b,it)}),rowActs(b,it))));
+    h("div",{class:"acts"},todoBtn(b,it,null),h("button",{class:"op",title:"Abrir",text:"⤢ Abrir",onclick:()=>openDrawer(b,it)}),rowActs(b,it)))));
   cols(b).forEach(cl=>tr.append(cellFor(b,it,cl)));return tr}
 function subRows(b,it){const G=D.statusSets.general;const rows=[h("tr",{class:"subhead"},h("td",{text:"Subelemento"}),h("td",{text:"Responsable"}),h("td",{text:"Estado"}),h("td",{text:"Fecha"}),h("td",{colspan:Math.max(1,cols(b).length-3)}))];
   (it.subs||[]).forEach(s=>{const done=(D.doneStatus.general||[]).includes(s.status);rows.push(h("tr",{class:"subrow"+(done?" done":"")},
-    h("td",{class:"name"},h("div",{class:"nm"},h("input",{value:s.name,title:s.name,onchange:e=>{s.name=e.target.value;save()}}),todoBtn(b,it,s),h("button",{class:"op",title:"Borrar subelemento",text:"✕",onclick:()=>{it.subs=it.subs.filter(x=>x!==s);save();render()}}))),
+    h("td",{class:"name"},h("div",{class:"nm"},wrapTA(s.name,v=>{s.name=v;save()}),h("div",{class:"acts"},todoBtn(b,it,s),h("button",{class:"op",title:"Borrar subelemento",text:"✕",onclick:()=>{it.subs=it.subs.filter(x=>x!==s);save();render()}})))),
     h("td",{},personCell(s.owner,v=>{s.owner=v;save();render()})),
     h("td",{},statusCell(null,s.status,v=>{s.status=v;save();render()},G)),
     h("td",{},h("div",{class:"cell"},dateCell(s.due,done,v=>{s.due=v;save();render()}))),
@@ -618,6 +631,12 @@ function rowActs(b,it){let cal=null;
   const del=h("button",{class:"ra del",title:"Borrar",text:"✕",onclick:e=>{const t=e.currentTarget;if(t.dataset.sure){b.items=b.items.filter(x=>x!==it);(D.people||[]).forEach(p=>{p.todo=todoOf(p).filter(x=>!x.k.startsWith(b.id+"|"+it.id))});save();render();toast("Elemento borrado")}
     else{t.dataset.sure=1;t.textContent="¿Borrar?";t.classList.add("sure");setTimeout(()=>{if(t.isConnected){delete t.dataset.sure;t.textContent="✕";t.classList.remove("sure")}},3500)}}});
   return h("span",{class:"ras"},cal,del)}
+/* texto que no se corta: crece en varias líneas */
+function fitTA(t){t.style.height="auto";t.style.height=t.scrollHeight+"px"}
+function wrapTA(val,onSet,cls){const t=h("textarea",{class:"wta"+(cls?" "+cls:""),rows:1,spellcheck:"false",
+    oninput:e=>fitTA(e.target),onkeydown:e=>{if(e.key==="Enter"){e.preventDefault();e.target.blur()}},onchange:e=>onSet(e.target.value.replace(/\n/g," ").trim())});
+  t.value=val||"";requestAnimationFrame(()=>fitTA(t));return t}
+addEventListener("resize",()=>document.querySelectorAll("textarea.wta").forEach(fitTA));
 /* ---------- archivos ---------- */
 function fIcon(f){const n=(f.n||"").toLowerCase(),t=f.t||"";
   if(f.url&&!f.id){if(/docs\.google\.com\/spreadsheets/.test(f.url))return"📊";if(/docs\.google\.com\/(document|presentation)/.test(f.url))return"📝";if(/drive\.google\.com\/drive\/folders/.test(f.url))return"📁";return"🔗"}
