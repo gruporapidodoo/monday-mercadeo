@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mercadeo Grupo Rapid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#f6f7fb;--sf:#ffffff;--sf2:#f5f6f8;--ink:#323338;--mu:#676879;--ln:#e1e3ea;--ln2:#c3c6d4;
@@ -231,6 +232,49 @@ tr.subhead td:first-child{text-align:left;padding-left:40px}
   .mwi .hm{display:none}
   .fields{grid-template-columns:1fr}
 }
+/* === Estilo monday.com (6 nov 2026) === */
+:root{--bg:#f6f7fb;--ln:#e6e9ef;--ln2:#d0d4e4;--ink:#323338;--mu:#676879;--acc:#0073ea;--acc2:#cce5ff}
+body{font-family:"Figtree","Roboto","Segoe UI",system-ui,sans-serif;font-size:14px}
+.top{padding:18px 32px 0}
+.top h1{font-size:24px;font-weight:600}
+.bar{padding:10px 32px}
+.content{padding:20px 32px 60px;background:var(--sf)}
+.bar .pri{border-radius:4px;padding:8px 14px;font-weight:500}
+.bar .pri:hover{background:#0060b9}
+.chip{border-radius:4px}
+.tabs button{padding:8px 14px;font-weight:500}
+/* grupos */
+.grp{margin-bottom:34px}
+.gh{margin-bottom:8px}
+.gh input{font-size:18px;font-weight:600}
+.tw{border-radius:0}
+table{border-spacing:0;min-width:980px}
+th{font-weight:400;color:var(--mu);font-size:14px;height:36px;border-top:1px solid var(--ln)}
+th,td{border-color:var(--ln)}
+td{height:36px;background:var(--sf)}
+th:first-child,td:first-child{border-left-width:6px;border-radius:0}
+tbody tr:hover td{background:#f5f6f8}
+tbody tr:hover td .st{filter:none}
+.nm input{font-size:14px}
+/* celdas de estado y prioridad: color completo, sin bordes, como Monday */
+.st,button.st,.cell .st{border:0!important;outline:0;box-shadow:none;border-radius:0;color:#fff;font-weight:400;font-size:14px;letter-spacing:.1px;margin:0}
+td:has(> .st), td:has(> .cell > .st){padding:0;border-right:1px solid #fff}
+.st:hover{filter:brightness(1.06)}
+.cell{padding:0}
+/* fechas */
+input.dt{font-size:14px;color:var(--ink)}
+/* cronograma: barra del color del grupo */
+.tl{height:24px;width:160px;border-radius:12px;background:color-mix(in srgb,var(--gc) 45%,#ffffff)}
+.tl i{background:var(--gc)}
+.tl span{font-size:12.5px;font-weight:500;line-height:24px;text-shadow:none}
+/* fila de resumen (batería de estados) */
+.batt{height:24px;border-radius:0;margin:6px 8px}
+/* etiquetas */
+.tag{border-radius:3px;padding:2px 8px;font-size:13px}
+/* barra lateral */
+.side{background:#fff}
+.nav button{border-radius:4px;padding:7px 12px}
+.nav button.on{background:#cce5ff;color:#0073ea}
 </style>
 </head>
 <body>
