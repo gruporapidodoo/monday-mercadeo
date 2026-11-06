@@ -299,6 +299,20 @@ input.dt{font-size:14px;color:var(--ink)}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#323338;color:#fff;padding:10px 16px;border-radius:6px;z-index:99;font-size:14px;max-width:90vw}
 td.name{min-width:380px;width:380px}
 .nm input{min-width:0;flex:1}
+
+/* Mi día · To Do */
+.nm .op.todo{white-space:nowrap;font-size:12.5px}
+.nm .op.todo.on{opacity:1;color:#d97706;font-weight:600}
+.tdp{padding:8px 0;border-bottom:1px solid var(--ln)}
+.tdn{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.tdb{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.tdb .btn.sel{background:#fff3cd;border-color:#fdab3d}
+.tdb input.dt{border:1px solid var(--ln);border-radius:4px;padding:4px 6px;width:140px}
+.pop:has(.tdp){width:360px;max-width:calc(100vw - 24px)}
+.ras{display:inline-flex;gap:2px;margin-left:2px;flex:none}
+.ra{border:0;background:none;color:var(--mu);padding:3px 5px;border-radius:4px;cursor:pointer;font-size:13px;text-decoration:none;opacity:.55;line-height:1.2}
+tr:hover .ra{opacity:1}.ra:hover{background:var(--ln)}
+.ra.del:hover{color:#e2445c}.ra.sure{opacity:1;background:#e2445c;color:#fff!important;font-size:12px;font-weight:600}
 /* avisos */
 .alerts{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
 .al{display:flex;flex-direction:column;align-items:flex-start;gap:2px;border:0;border-radius:6px;padding:8px 14px;cursor:pointer;font:inherit;text-align:left;max-width:360px;color:#fff}
@@ -403,13 +417,13 @@ function match(it){if(UI.person!=="all"&&(UI.person==="none"?it.owner:it.owner!=
 function nav(){const n=$("#nav");n.innerHTML="";const mob=$("#mobNav");mob.innerHTML="";
   const add=(id,label,icon,ct)=>{n.append(h("button",{class:UI.view===id?"on":"",onclick:()=>go(id)},h("span",{text:icon}),h("span",{text:label}),ct!=null?h("span",{class:"ct",text:ct}):null));mob.append(h("option",{value:id,selected:UI.view===id,text:icon+" "+label}))};
   const link=(href,icon,label)=>n.append(h("a",{href,target:"_blank",style:{display:"flex",gap:"8px",padding:"7px 10px",borderRadius:"6px",textDecoration:"none",color:"inherit"}},h("span",{text:icon}),h("span",{text:label}),h("span",{class:"ct",text:"↗"})));
-  n.append(h("h6",{text:"Mi día"}));
+  n.append(h("h6",{text:"Tableros"}));
+  D.boards.forEach(b=>add(b.id,b.name,b.icon,b.items.filter(i=>!isDone(b,i)).length));
+  n.append(h("h6",{text:"Mi día · To Do"}));
   D.people.forEach(p=>add("me:"+p.id,p.name+" · "+p.role,p.id==="hilda"?"🔴":"🔵",pendingToday(p.id)));
   n.append(h("h6",{text:"Equipo"}));
   add("cals","Calendario","📅");add("home","Todo lo pendiente","📋");
-  link("/anuncios","🎬","Revisión de piezas");link("/drive","📁","Drive de Mercadeo");
-  n.append(h("h6",{text:"Tableros (detalle)"}));
-  D.boards.forEach(b=>add(b.id,b.name,b.icon,b.items.filter(i=>!isDone(b,i)).length));
+  link("/drive","📁","Drive de Mercadeo");
   mob.onchange=()=>go(mob.value)}
 function go(v){UI.view=v;if(v!=="home"&&v!=="cals"&&!v.startsWith("me:"))UI.tab=board(v).tabs[0];closeDrawer();render();save();$("#content").scrollTop=0}
 /* ---------- render ---------- */
@@ -485,11 +499,11 @@ function itemRow(b,it){const done=isDone(b,it),subs=it.subs||[],sd=subs.filter(s
     h("button",{class:"sub",title:"Subelementos",onclick:()=>{UI.open.has(it.id)?UI.open.delete(it.id):UI.open.add(it.id);render()},text:(UI.open.has(it.id)?"▾ ":"▸ ")+(subs.length?sd+"/"+subs.length:"+")}),
     h("input",{value:it.name,title:it.name,onchange:e=>{it.name=e.target.value;save()}}),
     (it.updates||[]).length?h("span",{class:"upd",title:"Actualizaciones",text:"💬"+it.updates.length}):null,
-    h("button",{class:"op",title:"Abrir",text:"⤢ Abrir",onclick:()=>openDrawer(b,it)}))));
+    todoBtn(b,it,null),h("button",{class:"op",title:"Abrir",text:"⤢ Abrir",onclick:()=>openDrawer(b,it)}),rowActs(b,it))));
   cols(b).forEach(cl=>tr.append(cellFor(b,it,cl)));return tr}
 function subRows(b,it){const G=D.statusSets.general;const rows=[h("tr",{class:"subhead"},h("td",{text:"Subelemento"}),h("td",{text:"Responsable"}),h("td",{text:"Estado"}),h("td",{text:"Fecha"}),h("td",{colspan:Math.max(1,cols(b).length-3)}))];
   (it.subs||[]).forEach(s=>{const done=(D.doneStatus.general||[]).includes(s.status);rows.push(h("tr",{class:"subrow"+(done?" done":"")},
-    h("td",{class:"name"},h("div",{class:"nm"},h("input",{value:s.name,title:s.name,onchange:e=>{s.name=e.target.value;save()}}),h("button",{class:"op",title:"Borrar subelemento",text:"✕",onclick:()=>{it.subs=it.subs.filter(x=>x!==s);save();render()}}))),
+    h("td",{class:"name"},h("div",{class:"nm"},h("input",{value:s.name,title:s.name,onchange:e=>{s.name=e.target.value;save()}}),todoBtn(b,it,s),s.due?h("a",{class:"ra",title:"Agregar a Google Calendar",href:gcalUrl(s.name,s.due,it.name+" · "+b.name),target:"_blank",rel:"noopener",text:"📅"}):null,h("button",{class:"op",title:"Borrar subelemento",text:"✕",onclick:()=>{it.subs=it.subs.filter(x=>x!==s);save();render()}}))),
     h("td",{},personCell(s.owner,v=>{s.owner=v;save();render()})),
     h("td",{},statusCell(null,s.status,v=>{s.status=v;save();render()},G)),
     h("td",{},h("div",{class:"cell"},dateCell(s.due,done,v=>{s.due=v;save();render()}))),
@@ -499,6 +513,39 @@ function subRows(b,it){const G=D.statusSets.general;const rows=[h("tr",{class:"s
 function addItem(b,gid,name){const it={id:uid(),group:gid,name,owner:"",status:sset(b)[0].id,due:"",prio:"",v:{},subs:[],updates:[],createdAt:Date.now()};b.items.push(it);save();render();return it}
 function newItem(b,gid){const it=addItem(b,gid,"Nuevo elemento");openDrawer(b,it)}
 
+
+/* ---------- Mi día · To Do: agregar cualquier tarea al checklist de una persona ---------- */
+const tdKey=(b,it,su)=>b.id+"|"+it.id+(su?"|"+su.id:"");
+function todoOf(p){return p.todo=Array.isArray(p.todo)?p.todo:[]}
+function findKey(k){const[bid,iid,sid]=k.split("|");const b=board(bid);if(!b)return null;const it=b.items.find(x=>x.id===iid);if(!it)return null;
+  const su=sid?(it.subs||[]).find(x=>x.id===sid):null;if(sid&&!su)return null;return{b,it,su}}
+function tdTask(e){const f=findKey(e.k);if(!f)return null;const{b,it,su}=f;
+  if(su)return{b,it,sub:su,k:e.k,pin:e,name:su.name,ctx:it.name+" · "+b.name,due:su.due||"",done:(D.doneStatus.general||[]).includes(su.status),toggle:v=>{su.status=v?"done":"pend"}};
+  return{b,it,k:e.k,pin:e,name:it.name,ctx:b.name,due:it.due||"",done:isDone(b,it),toggle:v=>{it.status=v?doneOf(b):sset(b)[0].id}}}
+// lo agregado para ese día; si es hoy, también lo de días anteriores que no se terminó
+function pinnedFor(p,day){const today=iso(TODAY);return todoOf(p).map(e=>{const t=tdTask(e);if(!t)return null;
+  if(e.day===day)return t;if(day===today&&e.day<day&&!t.done)return Object.assign(t,{carried:true});return null}).filter(Boolean)}
+function pinsOf(b,it,su){const k=tdKey(b,it,su),out=[];D.people.forEach(p=>todoOf(p).forEach(e=>{if(e.k===k)out.push({p,e})}));return out}
+function setPin(p,k,day){const L=todoOf(p).filter(e=>e.k!==k);if(day)L.push({k,day,at:Date.now()});
+  const lim=iso(new Date(TODAY.getTime()-45*864e5));p.todo=L.filter(e=>e.day>=lim||!(tdTask(e)||{done:true}).done);save();render()}
+function todoBtn(b,it,su){const k=tdKey(b,it,su),pins=pinsOf(b,it,su),today=iso(TODAY);
+  const act=pins.filter(x=>{const t=tdTask(x.e);return t&&!t.done&&(x.e.day>=today||true)});
+  const lbl=act.length?"☀ "+act.map(x=>x.p.name).join(", "):"☀ Mi día";
+  return h("button",{class:"op todo"+(act.length?" on":""),title:"Agregar a Mi día (To Do)",text:lbl,onclick:e=>{e.stopPropagation();todoPop(b,it,su,e.currentTarget)}})}
+function todoPop(b,it,su,anchor){const k=tdKey(b,it,su),today=iso(TODAY),tom=addDays(today,1);let me="";try{me=localStorage.getItem(KEY+"-me")||""}catch(e){}
+  const ppl=[...D.people].sort((a,c)=>(c.id===me)-(a.id===me));
+  const kids=[h("div",{class:"t",text:"Agregar a Mi día · "+(su?su.name:it.name)})];
+  ppl.forEach(p=>{const cur=todoOf(p).find(e=>e.k===k);const pick=day=>{try{localStorage.setItem(KEY+"-me",p.id)}catch(e){}setPin(p,k,day);closePop();toast(day?"Agregada al To Do de "+p.name+(day===today?" para hoy":" para el "+fd(day)):"Quitada del To Do de "+p.name)};
+    const dt=h("input",{type:"date",class:"dt",value:cur&&cur.day!==today&&cur.day!==tom?cur.day:"",title:"Otra fecha",onchange:e=>{if(e.target.value)pick(e.target.value)}});
+    kids.push(h("div",{class:"tdp"},h("div",{class:"tdn"},av(p.id),h("b",{text:p.name}),cur?h("span",{class:"mu",text:"· en su To Do "+(cur.day===today?"hoy":"el "+fd(cur.day))}):null),
+      h("div",{class:"tdb"},h("button",{class:"btn"+(cur&&cur.day===today?" sel":""),text:"☀ Hoy",onclick:()=>pick(today)}),h("button",{class:"btn"+(cur&&cur.day===tom?" sel":""),text:"Mañana",onclick:()=>pick(tom)}),dt,
+        cur?h("button",{class:"btn",title:"Quitar de su To Do",text:"✕ Quitar",onclick:()=>pick("")}):null)))});
+  kids.push(h("div",{class:"mu",style:{fontSize:"12px",padding:"6px 2px 0"},text:"No cambia la fecha de entrega: solo la pone en el checklist del día. Si no se termina, pasa sola al día siguiente."}));
+  pop(anchor,kids)}
+function rowActs(b,it){const cal=it.due?h("a",{class:"ra",title:"Agregar a Google Calendar",href:gcalUrl(it.name,it.due,b.name+(it.notes?"\n\n"+it.notes:"")),target:"_blank",rel:"noopener",text:"📅"}):null;
+  const del=h("button",{class:"ra del",title:"Borrar",text:"✕",onclick:e=>{const t=e.currentTarget;if(t.dataset.sure){b.items=b.items.filter(x=>x!==it);(D.people||[]).forEach(p=>{p.todo=todoOf(p).filter(x=>!x.k.startsWith(b.id+"|"+it.id))});save();render();toast("Elemento borrado")}
+    else{t.dataset.sure=1;t.textContent="¿Borrar?";t.classList.add("sure");setTimeout(()=>{if(t.isConnected){delete t.dataset.sure;t.textContent="✕";t.classList.remove("sure")}},3500)}}});
+  return h("span",{class:"ras"},cal,del)}
 /* ---------- archivos ---------- */
 function fIcon(f){const n=(f.n||"").toLowerCase(),t=f.t||"";
   if(f.url&&!f.id){if(/docs\.google\.com\/spreadsheets/.test(f.url))return"📊";if(/docs\.google\.com\/(document|presentation)/.test(f.url))return"📝";if(/drive\.google\.com\/drive\/folders/.test(f.url))return"📁";return"🔗"}
@@ -604,16 +651,19 @@ function doneOf(b){return (D.doneStatus[b.statusSet]||[])[0]}
 function tasksOf(pid,subs){if(subs===undefined)subs=!!UI.subs;const out=[];D.boards.forEach(b=>b.items.forEach(it=>{
   if(it.owner===pid&&it.due)out.push({b,it,name:it.name,ctx:b.name,due:it.due,done:isDone(b,it),toggle:v=>{it.status=v?doneOf(b):sset(b)[0].id}});
   if(subs)(it.subs||[]).forEach(su=>{if(su.owner===pid&&su.due)out.push({b,it,sub:su,name:su.name,ctx:it.name+" · "+b.name,due:su.due,done:(D.doneStatus.general||[]).includes(su.status),toggle:v=>{su.status=v?"done":"pend"}})})}));return out}
-function pendingToday(pid){if(!D)return null;const k=iso(TODAY);return tasksOf(pid,false).filter(t=>!t.done&&t.due<=k).length}
+function pendingToday(pid){if(!D)return null;const k=iso(TODAY),p=person(pid);const pins=p?pinnedFor(p,k).filter(t=>!t.done):[],pk=new Set(pins.map(t=>t.k));return pins.length+tasksOf(pid,false).filter(t=>!t.done&&t.due<=k&&!pk.has(tdKey(t.b,t.it,null))).length}
 function addDays(s,n){const d=pd(s);d.setDate(d.getDate()+n);return iso(d)}
 function ckRow(t,day){const late=!t.done&&t.due<day;
   return h("div",{class:"cki"+(t.done?" ok":"")},h("input",{type:"checkbox",checked:t.done,title:"Marcar como listo",onchange:e=>{t.toggle(e.target.checked);t.it.updatedAt=Date.now();save();render()}}),
-    h("button",{class:"t",onclick:()=>openDrawer(t.b,t.it)},h("span",{text:t.name}),h("small",{text:t.ctx})),late?h("span",{class:"late",text:"Atrasado · "+fd(t.due)}):null)}
+    h("button",{class:"t",onclick:()=>openDrawer(t.b,t.it)},h("span",{text:t.name}),h("small",{text:t.ctx+(t.pin?(t.carried?" · ☀ en su To Do desde el "+fd(t.pin.day):" · ☀ agregada a su To Do")+(t.due?" · entrega "+fd(t.due):""):"")})),
+    late&&!t.pin?h("span",{class:"late",text:"Atrasado · "+fd(t.due)}):null,
+    t.pin?h("button",{class:"del",title:"Quitar de Mi día (la tarea sigue en su tablero)",text:"✕",onclick:()=>{const p=D.people.find(x=>todoOf(x).includes(t.pin));if(p)setPin(p,t.k,"")}}):null)}
 function renderSpace(c,p){const day=UI.day||iso(TODAY),all=tasksOf(p.id);
-  const todayL=all.filter(t=>t.due===day).sort((a,b)=>a.done-b.done),late=all.filter(t=>!t.done&&t.due<day).sort((a,b)=>a.due.localeCompare(b.due));
+  const pins=pinnedFor(p,day),pk=new Set(pins.map(t=>t.k));const keyOf=t=>tdKey(t.b,t.it,t.sub);
+  const todayL=[...pins,...all.filter(t=>t.due===day&&!pk.has(keyOf(t)))].sort((a,b)=>a.done-b.done),late=all.filter(t=>!t.done&&t.due<day&&!pk.has(keyOf(t))).sort((a,b)=>a.due.localeCompare(b.due));
   const n=todayL.length+late.length,ok=todayL.filter(t=>t.done).length;const dd=pd(day);
   const wrap=h("div",{class:"sp"});
-  wrap.append(h("div",{class:"guia"},h("b",{text:"Cómo se usa:"}),h("span",{text:"① Marque ☑ lo que terminó hoy."}),h("span",{text:"② Toque una tarea para ver el detalle o comentar."}),h("span",{text:"③ Lo rojo está atrasado: hágalo primero o cámbiele la fecha."})));
+  wrap.append(h("div",{class:"guia"},h("b",{text:"Cómo se usa:"}),h("span",{text:"① Marque ☑ lo que terminó hoy."}),h("span",{text:"② Toque una tarea para ver el detalle o comentar."}),h("span",{text:"③ Lo rojo está atrasado: hágalo primero o cámbiele la fecha."}),h("span",{text:"④ En cualquier tablero, «☀ Mi día» agrega una tarea a este checklist."})));
   wrap.append(h("div",{class:"sph"},h("button",{text:"‹",title:"Día anterior",onclick:()=>{UI.day=addDays(day,-1);render()}}),h("b",{text:DOW[dd.getDay()]+" "+dd.getDate()+" de "+MESL[dd.getMonth()].toLowerCase()}),
     h("button",{text:"›",title:"Día siguiente",onclick:()=>{UI.day=addDays(day,1);render()}}),h("button",{text:"Hoy",onclick:()=>{UI.day=null;render()}}),
     h("div",{class:"prog",title:ok+" de "+n},h("i",{style:{width:(n?ok/n*100:0)+"%"}})),h("span",{class:"mu",text:ok+" de "+n+" listos"}),
