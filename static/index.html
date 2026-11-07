@@ -483,6 +483,23 @@ tbody tr:hover .nm .acts{background:#f5f6f8;box-shadow:-10px 0 10px #f5f6f8}
 .m-n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.m-d{font-size:12px;white-space:nowrap}
 @media (max-width:700px){.m-row{grid-template-columns:minmax(0,1fr) auto 26px}.m-k,.m-d{display:none}}
 .inb .kind{font-size:11px;font-weight:700;border-radius:4px;padding:1px 6px;color:#fff;background:var(--kc);margin-right:6px}
+
+/* campana de avisos */
+.top{padding-right:76px}
+.bell{position:fixed;top:12px;right:20px;z-index:80;width:42px;height:42px;border-radius:50%;border:1px solid var(--ln);background:var(--sf);font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center}
+.bell:hover{background:var(--hov)}
+.bell b{position:absolute;top:-5px;right:-5px;min-width:21px;height:21px;border-radius:11px;background:#e2445c;color:#fff;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px;border:2px solid var(--sf)}
+.bell.ring{animation:ring .9s ease}
+@keyframes ring{0%,100%{transform:rotate(0)}15%{transform:rotate(18deg)}30%{transform:rotate(-16deg)}45%{transform:rotate(12deg)}60%{transform:rotate(-8deg)}75%{transform:rotate(4deg)}}
+.bellp{position:fixed;top:62px;right:20px;width:400px;max-width:calc(100vw - 24px);max-height:72vh;overflow:auto;background:var(--sf);border:1px solid var(--ln);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);z-index:81}
+.bellp header{position:sticky;top:0;background:var(--sf);display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--ln);font-weight:700;font-size:15px}
+.bellp .it{all:unset;box-sizing:border-box;display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-bottom:1px solid var(--ln);cursor:pointer;width:100%;color:var(--ink)}
+.bellp .it:hover{background:var(--hov)}
+.bellp .it.new{background:color-mix(in srgb,#e2445c 8%,var(--sf))}
+.bellp .it.new::after{content:"";width:9px;height:9px;border-radius:50%;background:#e2445c;flex:none;margin-top:6px}
+.kind{font-size:11px;font-weight:700;border-radius:4px;padding:1px 6px;color:#fff;background:var(--kc)}
+.popn{position:fixed;right:20px;z-index:95;width:350px;max-width:calc(100vw - 24px);background:var(--sf);color:var(--ink);border:1px solid var(--ln);border-left:5px solid var(--kc);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.2);padding:10px 14px;cursor:pointer;animation:popin .25s ease;transition:top .2s}
+@keyframes popin{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
 </style>
 </head>
 <body>
@@ -558,7 +575,7 @@ function showLogin(){if(document.querySelector(".login"))return;let user=me()||"
   document.body.append(h("div",{class:"login"},f));setTimeout(()=>i.focus(),50)}
 function logout(){setMeQuiet("");fetch("/api/logout",{method:"POST",credentials:"same-origin"}).finally(()=>location.reload())}
 async function boot(){try{const r=await fetch("/api/state",{credentials:"same-origin"});if(r.status===401)return showLogin();
-  const x=await r.json();D=x.data;BASE=structuredClone(x.data);VER=x.ver;CALKEY=x.calKey||"";syncLabel("Guardado ✓");render()}
+  const x=await r.json();D=x.data;BASE=structuredClone(x.data);VER=x.ver;CALKEY=x.calKey||"";syncLabel("Guardado ✓");render();notifyNew()}
   catch(e){syncLabel("Sin conexión",true);setTimeout(boot,4000)}}
 setInterval(poll,8000);setTimeout(()=>{if(D&&!me())showLogin()},1200);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});
 function toast(t){const e=h("div",{class:"toast",text:t});document.body.append(e);setTimeout(()=>e.remove(),2200)}
@@ -608,7 +625,7 @@ function nav(){const n=$("#nav");n.innerHTML="";const mob=$("#mobNav");mob.inner
   if(me())n.append(h("div",{class:"whoami ok"},av(me()),h("span",{text:(person(me())||{name:""}).name}),h("button",{class:"lnkb",text:"Cerrar sesión",onclick:logout})));
   add("cals","Calendario","📅");add("home","Todo lo pendiente","📋");
   link("/drive","📁","Drive de Mercadeo");
-  mob.onchange=()=>go(mob.value)}
+  mob.onchange=()=>go(mob.value);bellPaint()}
 function go(v){UI.view=v;if(v!=="home"&&v!=="cals"&&v!=="inbox"&&v!=="master"&&!v.startsWith("me:"))UI.tab=board(v).tabs[0];closeDrawer();render();save();$("#content").scrollTop=0}
 /* ---------- render ---------- */
 function render(){nav();const c=$("#content");c.innerHTML="";const bar=$("#bar");bar.innerHTML="";const tabs=$("#tabs");tabs.innerHTML="";
@@ -802,13 +819,36 @@ function renderInbox(c){const m=me();if(!m){c.append(h("div",{class:"empty2",tex
     ("Notification" in window)?h("button",{class:"btn",text:Notification.permission==="granted"?"🔔 Avisos del navegador activos":"🔔 Activar avisos en el navegador",onclick:()=>Notification.requestPermission().then(()=>render())}):null),
     h("p",{class:"mu",style:{margin:"0 0 10px",fontSize:"13px"},text:m==="hilda"?"Le avisamos: comentarios y @menciones, tareas nuevas de Irian, lo que está en aprobación, lo suyo que vence hoy o mañana y lo atrasado del equipo.":"Le avisamos: comentarios y @menciones, tareas nuevas que le asignen y lo suyo que vence hoy, mañana o está atrasado."}),
     chips,wrap)}
+
+/* ---------- campana arriba a la derecha + pop ups ---------- */
+function bellPaint(){if(!D)return;let b=document.getElementById("bell");
+  if(!b){b=h("button",{id:"bell",class:"bell",title:"Avisos",onclick:e=>{e.stopPropagation();toggleBell()}},"🔔",h("b"));document.body.append(b);
+    document.addEventListener("click",e=>{const p=document.getElementById("bellp");if(p&&!p.contains(e.target)&&!b.contains(e.target))p.remove()})}
+  const n=me()?unreadCount():0,badge=b.querySelector("b");badge.textContent=n>99?"99+":String(n);badge.style.display=n?"flex":"none"}
+function toggleBell(){const old=document.getElementById("bellp");if(old){old.remove();return}const p=person(me());if(!p){showLogin();return}
+  const L=myInbox().slice(0,25);
+  const box=h("div",{id:"bellp",class:"bellp"},h("header",{},h("span",{text:"🔔 Avisos"}),h("span",{style:{display:"flex",gap:"12px"}},
+    h("button",{class:"lnkb",text:"Marcar todo leído",onclick:e=>{e.stopPropagation();p.seenAt=Date.now();seeKeys(myInbox().map(x=>x.key));box.remove();bellPaint();render()}}),
+    h("button",{class:"lnkb",text:"Ver todos",onclick:()=>{box.remove();go("inbox")}}))));
+  if(!L.length)box.append(h("div",{class:"empty2",text:"🎉 No tiene avisos."}));
+  L.forEach(x=>{const K=KIND[x.kind];box.append(h("button",{class:"it"+(isNewA(x,p)?" new":""),onclick:()=>{seeKeys([x.key]);box.remove();openDrawer(x.b,x.it);bellPaint()}},
+    av(x.by),h("div",{style:{flex:"1",minWidth:"0"}},h("span",{class:"kind",style:{"--kc":K[1]},text:K[0]}),
+      h("b",{style:{display:"block",fontSize:"13.5px",margin:"3px 0 2px",lineHeight:"1.3"},text:x.title}),h("span",{class:"mu",style:{fontSize:"12.5px"},text:x.text}))))});
+  if("Notification" in window&&Notification.permission!=="granted")box.append(h("div",{style:{padding:"10px 14px"}},h("button",{class:"btn",text:"🔔 Activar avisos del navegador",onclick:()=>Notification.requestPermission()})));
+  document.body.append(box)}
+function popLayout(){[...document.querySelectorAll(".popn")].forEach((e,i)=>e.style.top=(64+i*100)+"px")}
+function popN(x){const K=KIND[x.kind];const el=h("div",{class:"popn",style:{"--kc":K[1]},onclick:()=>{seeKeys([x.key]);el.remove();popLayout();openDrawer(x.b,x.it);bellPaint()}},
+  h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},h("span",{class:"kind",style:{"--kc":K[1]},text:K[0]}),
+    h("button",{class:"lnkb",text:"✕",onclick:e=>{e.stopPropagation();el.remove();popLayout()}})),
+  h("b",{style:{display:"block",fontSize:"13.5px",margin:"5px 0 2px",lineHeight:"1.3"},text:x.title}),h("span",{class:"mu",style:{fontSize:"12.5px"},text:x.text}));
+  document.body.append(el);popLayout();setTimeout(()=>{el.remove();popLayout()},9000)}
 let NOTIF_INIT=false;
 function notifyNew(){const m=me(),p=person(m);if(!p)return;let sent=[];try{sent=JSON.parse(localStorage.getItem(KEY+"-nk-"+m)||"[]")}catch(e){}
   const S=new Set(sent),L=myInbox().filter(x=>isNewA(x,p)&&!S.has(x.key));
-  if(NOTIF_INIT&&L.length){const x=L[0];toast((x.kind==="c"?"💬 ":"🔔 ")+x.title);
+  if(NOTIF_INIT&&L.length){L.slice(0,3).forEach(popN);const bl=document.getElementById("bell");if(bl){bl.classList.remove("ring");void bl.offsetWidth;bl.classList.add("ring")}
     if("Notification" in window&&Notification.permission==="granted"){L.slice(0,3).forEach(y=>{try{new Notification(y.title,{body:y.text,tag:y.key})}catch(e){}})}}
   L.forEach(x=>S.add(x.key));NOTIF_INIT=true;try{localStorage.setItem(KEY+"-nk-"+m,JSON.stringify([...S].slice(-800)))}catch(e){}
-  const n=unreadCount();document.title=(n?"("+n+") ":"")+"Mercadeo Grupo Rapid"}
+  const n=unreadCount();document.title=(n?"("+n+") ":"")+"Mercadeo Grupo Rapid";bellPaint()}
 /* ---------- archivos ---------- */
 function fIcon(f){const n=(f.n||"").toLowerCase(),t=f.t||"";
   if(f.url&&!f.id){if(/docs\.google\.com\/spreadsheets/.test(f.url))return"📊";if(/docs\.google\.com\/(document|presentation)/.test(f.url))return"📝";if(/drive\.google\.com\/drive\/folders/.test(f.url))return"📁";return"🔗"}
