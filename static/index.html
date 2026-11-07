@@ -422,6 +422,29 @@ tbody tr:hover .nm .acts{background:#f5f6f8;box-shadow:-10px 0 10px #f5f6f8}
 .login .luser{background:var(--sf)!important;color:var(--ink)!important;border:2px solid var(--ln)!important;width:auto;padding:12px 18px}.luser .av{width:44px;height:44px;font-size:18px}.login .luser.on{border-color:var(--acc)!important;background:#eaf3ff!important}
 .whoami.ok{gap:8px}.whoami.ok .av{width:22px;height:22px;font-size:10px}
 .cme{display:inline-flex;gap:5px;align-items:center;font-size:12.5px;font-weight:600}.cme .av{width:20px;height:20px;font-size:10px}
+
+/* promociones: resumen */
+.pr-season{border-radius:14px;padding:18px 22px;color:#fff;margin:0 0 16px;background:linear-gradient(120deg,var(--sc),color-mix(in srgb,var(--sc) 55%,#000))}
+.pr-season small{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.85;font-weight:700}
+.pr-season b{display:block;font-size:24px;margin:4px 0 2px}
+.pr-season span{font-size:14px;opacity:.95}
+.pr-next{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 20px}
+.pr-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--ln);background:var(--sf);border-radius:999px;padding:5px 12px;font-size:12.5px;color:var(--ink)}
+.pr-chip i{width:9px;height:9px;border-radius:50%;background:var(--sc);display:inline-block}
+.pr-chip.on{border-color:var(--sc);box-shadow:0 0 0 2px color-mix(in srgb,var(--sc) 30%,transparent)}
+.pr-h{display:flex;align-items:baseline;gap:10px;margin:8px 0 10px}
+.pr-h h3{margin:0;font-size:17px}.pr-h span{color:var(--mu);font-size:13px}
+.pr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin:0 0 24px}
+.pr-card{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:6px;background:var(--sf);border:1px solid var(--ln);border-left:5px solid var(--sc);border-radius:10px;padding:12px 14px;color:var(--ink)}
+.pr-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.08)}
+.pr-card .t{font-weight:700;font-size:15px;line-height:1.3}
+.pr-card .o{font-size:13.5px}
+.pr-card .m{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--mu)}
+.pr-st{color:#fff;border-radius:4px;padding:2px 8px;font-size:11.5px;font-weight:600;background:var(--stc)}
+.pr-bar{height:6px;border-radius:3px;background:var(--ln);overflow:hidden}.pr-bar i{display:block;height:100%;background:var(--sc)}
+.pr-cd{font-weight:700;color:var(--ink)}
+.pr-gh{display:flex;align-items:center;gap:8px;margin:6px 0 8px;font-size:14px}.pr-gh i{width:12px;height:12px;border-radius:3px;background:var(--sc)}.pr-gh span{color:var(--mu);font-size:12.5px}
+.pr-empty{color:var(--mu);border:1px dashed var(--ln2);border-radius:10px;padding:16px;text-align:center;margin:0 0 24px}
 /* avisos */
 .alerts{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
 .al{display:flex;flex-direction:column;align-items:flex-start;gap:2px;border:0;border-radius:6px;padding:8px 14px;cursor:pointer;font:inherit;text-align:left;max-width:360px;color:#fff}
@@ -562,13 +585,13 @@ function render(){nav();const c=$("#content");c.innerHTML="";const bar=$("#bar")
   if(UI.view==="cals"){$("#title").textContent="Calendarios";$("#desc").textContent="Calendario de Hilda y calendario de Irian, cada uno conectado a su Google Calendar, con sus entregas de todos los tableros.";renderCals(c);return}
   const b=board(UI.view);if(!b){UI.view="home";return render()}
   $("#title").innerHTML="";$("#title").append(h("span",{text:b.icon}),h("span",{text:b.name}));$("#desc").textContent=b.desc||"";
-  const TL={table:"▦ Tabla principal",kanban:"▤ Kanban",calendar:"📅 Calendario",gantt:"▬ Cronograma"};
+  const TL={resumen:"✨ Resumen",table:"▦ Tabla principal",kanban:"▤ Kanban",calendar:"📅 Calendario",gantt:"▬ Cronograma"};
   b.tabs.forEach(t=>tabs.append(h("button",{class:UI.tab===t?"on":"",onclick:()=>{UI.tab=t;render();save()},text:TL[t]})));
   bar.append(h("button",{class:"pri",onclick:()=>{const g=b.groups[0];newItem(b,g.id)},text:"Nuevo elemento"}));
   personBar(bar);bar.append(filterBar(b));
   if(UI.tab==="table")bar.append(h("button",{class:"btn",onclick:()=>{const g={id:uid(),name:"Grupo nuevo",color:"#579bfc"};b.groups.unshift(g);save();render()},text:"+ Grupo"}));
-  {const a=alertStrip();if(a)c.append(a)}
-  if(UI.tab==="table")renderTable(b,c);else if(UI.tab==="kanban")renderKanban(b,c);else if(UI.tab==="calendar")renderCalendar([b],c);else renderGantt(b,c)}
+  if(UI.tab!=="resumen"){const a=alertStrip();if(a)c.append(a)}
+  if(UI.tab==="resumen")renderPromo(b,c);else if(UI.tab==="table")renderTable(b,c);else if(UI.tab==="kanban")renderKanban(b,c);else if(UI.tab==="calendar")renderCalendar([b],c);else renderGantt(b,c)}
 function personBar(bar){const s=h("input",{type:"search",placeholder:"Buscar",value:UI.q,oninput:e=>{UI.q=e.target.value;const p=e.target.selectionStart;render();const i=$("#bar input[type=search]");i.focus();i.setSelectionRange(p,p)}});bar.append(s);
   const chip=(id,label,a)=>h("button",{class:"chip"+(a?"":" all"),"aria-pressed":UI.person===id,onclick:()=>{UI.person=id;render();save()}},a,label);
   bar.append(chip("all","Todas",null));D.people.forEach(p=>bar.append(chip(p.id,p.name,av(p.id))));bar.append(chip("none","Por asignar",av(null)));
@@ -806,6 +829,43 @@ function renderCalendar(boards,c,who){if(!UI.cal){UI.cal=new Date(TODAY.getFullY
     if(todays.length>4)cell.append(h("button",{class:"more",text:"+"+(todays.length-4)+" más",onclick:ev2=>pop(ev2.currentTarget,todays.map(e=>h("button",{class:"p",onclick:()=>{closePop();openDrawer(e.b,e.it)}},av(e.owner),e.label)))}));
     g.append(cell);if(i===34&&d.getMonth()!==m.getMonth())break}
   c.append(g)}
+
+/* ---------- promociones: resumen ---------- */
+function prDays(a,b){return Math.round((pd(b)-pd(a))/864e5)}
+function prCard(b,it,mode){const k=iso(TODAY),v=it.v||{},sc=(D.tagColors||{})[v.serv]||"#579bfc",st=stat(b,it.status),subs=it.subs||[],
+  ok=subs.filter(x=>(D.doneStatus.general||[]).includes(x.status)).length;
+  let cd="";if(mode==="live"){const n=prDays(k,it.due);cd=n===0?"Termina hoy":"Quedan "+n+(n===1?" día":" días")}
+  else if(mode==="next"){const n=prDays(k,it.start);cd=n===1?"Empieza mañana":"Empieza en "+n+" días"}
+  return h("button",{class:"pr-card",style:{"--sc":sc},onclick:()=>openDrawer(b,it)},
+    h("div",{class:"m"},h("span",{class:"pr-st",style:{"--stc":st.color},text:st.label}),v.serv?h("span",{text:v.serv}):"",v.tipo?h("span",{text:"· "+v.tipo}):""),
+    h("div",{class:"t",text:it.name}),v.oferta?h("div",{class:"o",text:v.oferta}):"",
+    h("div",{class:"m"},h("span",{text:"📅 "+(it.start?fd(it.start):"")+(it.due?" – "+fd(it.due):"")}),cd?h("span",{class:"pr-cd",text:"· "+cd}):""),
+    v.canales?h("div",{class:"m",text:"📣 "+v.canales}):"",
+    subs.length?h("div",{},h("div",{class:"m",text:"Piezas y tareas: "+ok+" de "+subs.length}),h("div",{class:"pr-bar"},h("i",{style:{width:Math.round(ok/subs.length*100)+"%"}}))):"")}
+function renderPromo(b,c){const k=iso(TODAY),S=(b.seasons||[]).slice().sort((x,y)=>x.start.localeCompare(y.start));
+  const now=S.filter(x=>x.start<=k&&x.end>=k),up=S.filter(x=>x.start>k);
+  const main=now.slice().sort((x,y)=>prDays(x.start,x.end)-prDays(y.start,y.end))[0];
+  if(main){const n=prDays(k,main.end);c.append(h("div",{class:"pr-season",style:{"--sc":main.color}},h("small",{text:"Estamos en temporada"}),h("b",{text:main.name}),
+    h("span",{text:fd(main.start)+" – "+fd(main.end)+" · "+(n===0?"último día":"quedan "+n+" días")+(main.msg?" · "+main.msg:"")})))}
+  else if(up[0]){const n=prDays(k,up[0].start);c.append(h("div",{class:"pr-season",style:{"--sc":up[0].color}},h("small",{text:"Próxima temporada"}),h("b",{text:up[0].name}),
+    h("span",{text:"Empieza el "+fd(up[0].start)+" · faltan "+n+" días"})))}
+  const chips=h("div",{class:"pr-next"});S.filter(x=>x.end>=k).slice(0,7).forEach(x=>chips.append(h("span",{class:"pr-chip"+(x.start<=k?" on":""),style:{"--sc":x.color}},h("i"),
+    h("span",{text:x.name+" · "+fd(x.start)+(x.end!==x.start?" – "+fd(x.end):"")}))));if(chips.children.length)c.append(chips);
+  const its=b.items.filter(i=>match(i)),ok=["aprob","prod","activa"];
+  const live=its.filter(i=>i.start&&i.due&&i.start<=k&&i.due>=k&&ok.includes(i.status)).sort((x,y)=>x.due.localeCompare(y.due));
+  const next=its.filter(i=>!isDone(b,i)&&i.start&&i.start>k).sort((x,y)=>x.start.localeCompare(y.start));
+  const pendNow=its.filter(i=>!isDone(b,i)&&i.start&&i.start<=k&&(!i.due||i.due>=k)&&!ok.includes(i.status));
+  const sec=(t,sub,list,mode,empty)=>{c.append(h("div",{class:"pr-h"},h("h3",{text:t}),h("span",{text:sub})));
+    if(!list.length){c.append(h("div",{class:"pr-empty",text:empty}));return}const g=h("div",{class:"pr-grid"});list.forEach(it=>g.append(prCard(b,it,mode)));c.append(g)};
+  sec("🟢 Activas hoy",live.length+(live.length===1?" promoción":" promociones"),live,"live","Hoy no hay promociones activas.");
+  if(pendNow.length)sec("⏳ Deberían estar activas","ya empezaron pero siguen como idea o por aprobar",pendNow,"live","");
+  c.append(h("div",{class:"pr-h"},h("h3",{text:"🗓️ Próximas"}),h("span",{text:"por temporada; cada tarjeta es una empresa"})));
+  if(!next.length)c.append(h("div",{class:"pr-empty",text:"No hay promociones próximas. Agregue una con «Nuevo elemento»."}));
+  (b.groups||[]).forEach(g=>{const L=next.filter(i=>i.group===g.id);if(!L.length)return;
+    c.append(h("div",{class:"pr-gh",style:{"--sc":g.color}},h("i"),h("b",{text:g.name}),h("span",{text:L.length+(L.length===1?" promoción":" promociones")})));
+    const gr=h("div",{class:"pr-grid"});L.forEach(it=>gr.append(prCard(b,it,"next")));c.append(gr)});
+  {const L=next.filter(i=>!(b.groups||[]).some(g=>g.id===i.group));if(L.length){const gr=h("div",{class:"pr-grid"});L.forEach(it=>gr.append(prCard(b,it,"next")));c.append(gr)}}
+  c.append(h("div",{class:"pr-h"},h("h3",{text:"📅 Calendario de promociones"}),h("span",{text:"toque una para ver el detalle"})));renderCalendar([b],c)}
 /* ---------- cronograma ---------- */
 function renderGantt(b,c){const items=b.items.filter(i=>match(i)&&(i.start||i.due)&&!(UI.hideDone&&isDone(b,i)));if(!items.length){c.append(h("div",{class:"empty",text:"No hay elementos con fechas."}));return}
   let a0=new Date(Math.min(...items.map(i=>pd(i.start||i.due)))),z0=new Date(Math.max(...items.map(i=>pd(i.due||i.start))));a0.setDate(a0.getDate()-2);z0.setDate(z0.getDate()+3);
