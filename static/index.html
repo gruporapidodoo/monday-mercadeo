@@ -451,6 +451,21 @@ tbody tr:hover .nm .acts{background:#f5f6f8;box-shadow:-10px 0 10px #f5f6f8}
 .al b{font-size:14px;font-weight:600}.al span{font-size:12.5px;opacity:.92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:330px}
 .al.late{background:#e2445c}.al.hoy{background:#fdab3d}.al.sem{background:#579bfc}
 .al:hover{filter:brightness(1.06)}
+/* compacto: más espacio para el tablero */
+.top{padding:10px 24px 0}
+.top h1{font-size:20px}
+.top .desc{font-size:13px;margin:2px 0 0;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.top .desc.open{white-space:normal}
+.tabs{margin-top:4px}.tabs button{padding:6px 12px}
+.bar{padding:6px 24px;gap:6px}
+.bar .pri{padding:6px 12px}
+.bar input[type=search]{min-width:160px;padding:5px 10px}
+.fbar{width:auto;margin-top:0}
+.content{padding:10px 24px 40px}
+.st{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sbt{float:left;margin:0 10px 0 0;border:1px solid var(--ln);background:var(--sf);color:var(--ink);border-radius:6px;padding:1px 8px;font-size:15px;line-height:24px;cursor:pointer}
+.app.nosb{grid-template-columns:minmax(0,1fr)}.app.nosb .side{display:none}
+@media (max-width:900px){.sbt{display:none}}
 </style>
 </head>
 <body>
@@ -468,7 +483,7 @@ tbody tr:hover .nm .acts{background:#f5f6f8;box-shadow:-10px 0 10px #f5f6f8}
   </aside>
   <main class="main">
     <div class="mob"><select id="mobNav"></select></div>
-    <div class="top"><h1 id="title"></h1><p class="desc" id="desc"></p><div class="tabs" id="tabs"></div></div>
+    <div class="top"><button id="sbt" class="sbt" title="Ocultar o mostrar el menú">☰</button><h1 id="title"></h1><p class="desc" id="desc" title="Toque para ver completo" onclick="this.classList.toggle('open')"></p><div class="tabs" id="tabs"></div></div>
     <div class="bar" id="bar"></div>
     <div class="content" id="content"></div>
   </main>
@@ -1045,6 +1060,8 @@ $("#fileIn").onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t
 $("#bIcs").onclick=()=>ics(null);
 $("#bTheme").onclick=()=>{const r=document.documentElement,cur=r.dataset.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");r.dataset.theme=cur==="dark"?"light":"dark";try{localStorage.setItem(KEY+"-theme",r.dataset.theme)}catch(e){}};
 try{const t=localStorage.getItem(KEY+"-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}
+(()=>{const a=document.querySelector(".app"),k="mondayGR-sb",b=document.getElementById("sbt");try{if(localStorage.getItem(k)==="0")a.classList.add("nosb")}catch(e){}
+  if(b)b.onclick=()=>{a.classList.toggle("nosb");try{localStorage.setItem(k,a.classList.contains("nosb")?"0":"1")}catch(e){}}})();
 boot();
 })();
 </script>
